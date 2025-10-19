@@ -10,13 +10,17 @@ import {
 } from '@mantine/core'
 import { useState, useMemo } from 'react'
 import { MapContainer, Polygon, TileLayer, useMapEvents } from 'react-leaflet'
-import type { LatLngExpression, LatLngLiteral } from 'leaflet'
+import type { LatLngExpression, LatLngLiteral, LatLngTuple } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { notifications } from '@mantine/notifications'
 import { useRidersQuery } from '@/features/riders/api'
 import { generateTrips } from '@/features/trips/api-extra'
+import { cellToBoundary, gridDisk, latLngToCell } from 'h3-js'
 
-const defaultCenter: LatLngExpression = [36.7538, 3.0589]
+const defaultCenter: LatLngTuple = [36.7538, 3.0589]
+const h3Resolution = Number.isFinite(Number(import.meta.env.VITE_H3_RESOLUTION))
+  ? Number(import.meta.env.VITE_H3_RESOLUTION)
+  : 8
 
 const DrawingLayer = ({ onUpdate }: { onUpdate: (pts: LatLngLiteral[] | ((prev: LatLngLiteral[]) => LatLngLiteral[])) => void }) => {
   useMapEvents({
@@ -42,6 +46,33 @@ export const TripGeneratorPage = () => {
   const [polygon, setPolygon] = useState<LatLngLiteral[]>([])
   const [count, setCount] = useState(10)
   const polygonPoints = polygon.length ? ([...polygon, polygon[0]] as LatLngExpression[]) : []
+
+  const hexPolygons = useMemo(() => {
+    const seeds = polygon.length
+      ? polygon.map((point) => ({ lat: point.lat, lng: point.lng }))
+      : [{ lat: defaultCenter[0], lng: defaultCenter[1] }]
+
+    const unique = new Map<string, LatLngTuple[]>()
+
+    for (const seed of seeds) {
+      try {
+        const origin = latLngToCell(seed.lat, seed.lng, h3Resolution)
+        const disk = gridDisk(origin, 1)
+        const cellIndexes = Array.isArray(disk) ? disk : Array.from(disk as Iterable<string>)
+        cellIndexes.forEach((index) => {
+          if (unique.has(index)) {
+            return
+          }
+          const boundary = cellToBoundary(index).map(([lat, lng]) => [lat, lng] as LatLngTuple)
+          unique.set(index, boundary)
+        })
+      } catch {
+        // ignore
+      }
+    }
+
+    return Array.from(unique.values())
+  }, [polygon])
 
   const handleGenerate = async () => {
     if (polygon.length < 3) {
@@ -119,9 +150,16 @@ export const TripGeneratorPage = () => {
           scrollWheelZoom
         >
           <TileLayer
-            attribution="&copy; OpenStreetMap contributors"
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors &copy; <a href='https://carto.com/attributions'>CARTO</a>"
+            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
           />
+          {hexPolygons.map((boundary, index) => (
+            <Polygon
+              key={`trip-h3-cell-${index}`}
+              positions={boundary}
+              pathOptions={{ color: '#adb5bd', weight: 1, fillOpacity: 0 }}
+            />
+          ))}
           <DrawingLayer onUpdate={setPolygon} />
           {polygonPoints.length ? <Polygon positions={polygonPoints} color="purple" opacity={0.5} /> : null}
         </MapContainer>
@@ -129,4 +167,3 @@ export const TripGeneratorPage = () => {
     </Stack>
   )
 }
-

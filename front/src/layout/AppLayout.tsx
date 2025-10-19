@@ -17,6 +17,7 @@ type NavItem =
 
 const navItems: NavItem[] = [
   { label: 'Overview', to: '/', key: 'overview' },
+  { label: 'Live Map', to: '/live-map', key: 'live-map' },
   {
     label: 'Drivers',
     key: 'drivers',

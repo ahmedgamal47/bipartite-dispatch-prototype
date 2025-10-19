@@ -183,9 +183,46 @@ export const DriversPage = () => {
   return (
     <Flex gap="xl" align="stretch" h="100%">
       <Paper shadow="xs" radius="md" p="xl" withBorder flex="1">
+        <Group justify="space-between" mb="md">
+          <Title order={4}>Create / Update Driver</Title>
+          <Button
+            color="red"
+            variant="light"
+            loading={deleteDriver.isPending}
+            onClick={() =>
+              modals.openConfirmModal({
+                title: 'Remove all drivers?',
+                centered: true,
+                labels: { confirm: 'Delete all', cancel: 'Cancel' },
+                confirmProps: { color: 'red' },
+                children: (
+                  <Text size="sm">
+                    This will permanently remove every driver. Are you sure?
+                  </Text>
+                ),
+                onConfirm: async () => {
+                  try {
+                    await httpClient.delete('/drivers')
+                    notifications.show({
+                      title: 'Drivers removed',
+                      message: 'All drivers have been deleted.',
+                      color: 'red',
+                    })
+                    driversQuery.refetch()
+                  } catch (error: unknown) {
+                    const message =
+                      error instanceof Error ? error.message : 'Unable to delete drivers'
+                    notifications.show({ title: 'Delete all failed', message, color: 'red' })
+                  }
+                },
+              })
+            }
+          >
+            Delete All
+          </Button>
+        </Group>
         <form onSubmit={handleSubmit}>
           <Stack gap="md">
-            <Title order={4}>Create / Update Driver</Title>
             <TextInput
               label="Driver Name"
               placeholder="e.g. Imane B."
@@ -241,40 +278,6 @@ export const DriversPage = () => {
                   Cancel
                 </Button>
               )}
-              <Button
-                color="red"
-                variant="light"
-                loading={deleteDriver.isPending}
-                onClick={() =>
-                  modals.openConfirmModal({
-                    title: 'Remove all drivers?',
-                    centered: true,
-                    labels: { confirm: 'Delete all', cancel: 'Cancel' },
-                    confirmProps: { color: 'red' },
-                    children: (
-                      <Text size="sm">
-                        This will permanently remove every driver. Are you sure?
-                      </Text>
-                    ),
-                    onConfirm: async () => {
-                      try {
-                        await httpClient.delete('/drivers')
-                        notifications.show({
-                          title: 'Drivers removed',
-                          message: 'All drivers have been deleted.',
-                          color: 'red',
-                        })
-                        driversQuery.refetch()
-                      } catch (error: unknown) {
-                        const message = error instanceof Error ? error.message : 'Unable to delete drivers'
-                        notifications.show({ title: 'Delete all failed', message, color: 'red' })
-                      }
-                    },
-                  })
-                }
-              >
-                Delete All
-              </Button>
             </Group>
           </Stack>
         </form>

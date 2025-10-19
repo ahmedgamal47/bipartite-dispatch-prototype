@@ -1,14 +1,17 @@
-import { Module } from '@nestjs/common'
-import { MongooseModule } from '@nestjs/mongoose'
-import { DispatchController } from './dispatch.controller'
-import { PoolingService } from './services/pooling.service'
-import { MatchingService } from './services/matching.service'
-import { TelemetryService } from './services/telemetry.service'
-import { Driver, DriverSchema } from '../drivers/schemas/driver.schema'
-import { OffersModule } from '../offers/offers.module'
+import { forwardRef, Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { DispatchController } from './dispatch.controller';
+import { PoolingService } from './services/pooling.service';
+import { MatchingService } from './services/matching.service';
+import { TelemetryService } from './services/telemetry.service';
+import { Driver, DriverSchema } from '../drivers/schemas/driver.schema';
+import { OffersModule } from '../offers/offers.module';
 
 @Module({
-  imports: [MongooseModule.forFeature([{ name: Driver.name, schema: DriverSchema }]), OffersModule],
+  imports: [
+    MongooseModule.forFeature([{ name: Driver.name, schema: DriverSchema }]),
+    forwardRef(() => OffersModule),
+  ],
   providers: [PoolingService, MatchingService, TelemetryService],
   controllers: [DispatchController],
   exports: [PoolingService, MatchingService, TelemetryService],

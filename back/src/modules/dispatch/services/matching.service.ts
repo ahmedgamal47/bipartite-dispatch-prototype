@@ -63,6 +63,7 @@ export class MatchingService {
     const assignments: MatchingAssignment[] = [];
     const unassigned: string[] = [];
     const scorecards: MatchingScorecard[] = [];
+    const assignedDriverIds = new Set<string>();
 
     for (let i = 0; i < batch.trips.length; i++) {
       const trip = batch.trips[i];
@@ -104,6 +105,11 @@ export class MatchingService {
       }
 
       const driver = availableDrivers[driverIndex];
+      if (assignedDriverIds.has(driver.id)) {
+        unassigned.push(batch.trips[tripIndex].id);
+        continue;
+      }
+
       assignments.push({
         tripId: batch.trips[tripIndex].id,
         driverId: driver.id,
@@ -111,6 +117,7 @@ export class MatchingService {
         driverStatus: driver.status,
         distanceMeters: Math.round(distance ?? 0),
       });
+      assignedDriverIds.add(driver.id);
     }
 
     // Any trip not present in assignments/unassigned from assignmentPairs should be marked unassigned.

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from '@tanstack/react-query'
 import { httpClient } from '@/lib/httpClient'
 import type { DriverProfile, DriverStatus } from '@/types/dispatch'
 
@@ -21,15 +21,21 @@ export type UpdateDriverPayload = Partial<Omit<CreateDriverPayload, 'location'>>
   }
 }
 
-const DRIVERS_KEY = ['drivers']
+const DRIVERS_KEY = ['drivers'] as const
 
-export const useDriversQuery = () =>
+type DriversQueryOptions = Omit<
+  UseQueryOptions<DriverProfile[], Error, DriverProfile[], typeof DRIVERS_KEY>,
+  'queryKey' | 'queryFn'
+>
+
+export const useDriversQuery = (options?: DriversQueryOptions) =>
   useQuery({
     queryKey: DRIVERS_KEY,
     queryFn: async (): Promise<DriverProfile[]> => {
       const { data } = await httpClient.get('/drivers')
       return data
     },
+    ...options,
   })
 
 export const useCreateDriverMutation = () => {

@@ -120,9 +120,10 @@ export const TripsPage = () => {
     setStatus('queued')
   }
 
-  const handleFlushPools = () => {
+  const handleFlushPools = (targetH3Index?: string) => {
+    const payload = targetH3Index ? { h3Index: targetH3Index } : {}
     flushPools.mutate(
-      {},
+      payload,
       {
         onSuccess: (results) => {
           setLastResults(results)
@@ -130,7 +131,7 @@ export const TripsPage = () => {
           const unmatchedCount = results.reduce((acc, result) => acc + result.unassigned.length, 0)
 
           notifications.show({
-            title: 'Pools flushed',
+            title: targetH3Index ? `Pool ${targetH3Index} released` : 'Pools released',
             message: `Assignments: ${assignmentCount}, Unassigned: ${unmatchedCount}`,
             color: assignmentCount > 0 ? 'green' : unmatchedCount > 0 ? 'yellow' : 'blue',
           })
@@ -199,8 +200,42 @@ export const TripsPage = () => {
     <>
       <Flex gap="xl" align="stretch" h="100%">
       <Paper shadow="xs" radius="md" p="xl" withBorder flex="1">
-        <Stack gap="md">
+        <Group justify="space-between" mb="md">
           <Title order={4}>Request Trip</Title>
+          <Button
+            variant="light"
+            color="red"
+            onClick={() =>
+              modals.openConfirmModal({
+                title: 'Remove all trips?',
+                centered: true,
+                labels: { confirm: 'Delete all', cancel: 'Cancel' },
+                confirmProps: { color: 'red' },
+                children: (
+                  <Text size="sm">This will permanently remove every trip. Are you sure?</Text>
+                ),
+                onConfirm: async () => {
+                  try {
+                    await httpClient.delete('/trips')
+                    notifications.show({
+                      title: 'Trips removed',
+                      message: 'All trips have been deleted.',
+                      color: 'red',
+                    })
+                    tripsQuery.refetch()
+                  } catch (error: unknown) {
+                    const message =
+                      error instanceof Error ? error.message : 'Unable to delete trips'
+                    notifications.show({ title: 'Delete all failed', message, color: 'red' })
+                  }
+                },
+              })
+            }
+          >
+            Delete All
+          </Button>
+        </Group>
+        <Stack gap="md">
           <Select
             label="Select Rider"
             placeholder={ridersQuery.isLoading ? 'Loading riders…' : 'Choose rider'}
@@ -237,37 +272,6 @@ export const TripsPage = () => {
           <Group>
             <Button radius="md" onClick={handleSubmit} disabled={!canSubmit} loading={createTrip.isPending}>
               Submit Trip Request
-            </Button>
-            <Button
-              variant="light"
-              color="red"
-              onClick={() =>
-                modals.openConfirmModal({
-                  title: 'Remove all trips?',
-                  centered: true,
-                  labels: { confirm: 'Delete all', cancel: 'Cancel' },
-                  confirmProps: { color: 'red' },
-                  children: (
-                    <Text size="sm">This will permanently remove every trip. Are you sure?</Text>
-                  ),
-                  onConfirm: async () => {
-                    try {
-                      await httpClient.delete('/trips')
-                      notifications.show({
-                        title: 'Trips removed',
-                        message: 'All trips have been deleted.',
-                        color: 'red',
-                      })
-                      tripsQuery.refetch()
-                    } catch (error: unknown) {
-                      const message = error instanceof Error ? error.message : 'Unable to delete trips'
-                      notifications.show({ title: 'Delete all failed', message, color: 'red' })
-                    }
-                  },
-                })
-              }
-            >
-              Delete All Trips
             </Button>
           </Group>
         </Stack>
@@ -449,8 +453,13 @@ export const TripsPage = () => {
         <Paper withBorder radius="md" p="md" shadow="xs" style={{ overflow: 'hidden' }}>
           <Group justify="space-between" mb="md">
             <Title order={6}>Pooling Window</Title>
-            <Button size="xs" variant="light" onClick={handleFlushPools} loading={flushPools.isPending}>
-              Flush Now
+            <Button
+              size="xs"
+              variant="light"
+              onClick={() => handleFlushPools()}
+              loading={flushPools.isPending}
+            >
+              Release All
             </Button>
           </Group>
           <ScrollArea h={180} type="auto">
@@ -458,16 +467,26 @@ export const TripsPage = () => {
               {poolsQuery.data?.length ? (
                 poolsQuery.data.map((pool) => (
                   <Paper key={pool.h3Index} withBorder radius="md" p="sm">
-                    <Group justify="space-between">
-                      <Text fw={600}>H3 {pool.h3Index}</Text>
-                      <Text size="xs" c="dimmed">
-                        Trips: {pool.trips.length} · Updated {formatTimestamp(pool.updatedAt)}
-                      </Text>
+                    <Group justify="space-between" align="flex-start">
+                      <Stack gap={2}>
+                        <Text fw={600}>H3 {pool.h3Index}</Text>
+                        <Text size="xs" c="dimmed">
+                          Trips: {pool.trips.length} - Updated {formatTimestamp(pool.updatedAt)}
+                        </Text>
+                      </Stack>
+                      <Button
+                        size="xs"
+                        variant="light"
+                        onClick={() => handleFlushPools(pool.h3Index)}
+                        loading={flushPools.isPending}
+                      >
+                        Release
+                      </Button>
                     </Group>
                     <Stack gap={4} mt="xs">
                       {pool.trips.map((trip) => (
                         <Text key={trip.id} size="xs" c="dimmed">
-                          #{trip.id} · {trip.status} · rider {trip.riderId}
+                          #{trip.id} - {trip.status} - rider {trip.riderId}
                         </Text>
                       ))}
                     </Stack>
@@ -475,13 +494,12 @@ export const TripsPage = () => {
                 ))
               ) : (
                 <Text size="sm" c="dimmed">
-                  {poolsQuery.isLoading ? 'Loading pools…' : 'No trips currently pooling.'}
+                  {poolsQuery.isLoading ? 'Loading pools.' : 'No trips currently pooling.'}
                 </Text>
               )}
             </Stack>
           </ScrollArea>
         </Paper>
-
         <Paper withBorder radius="md" p="md" shadow="xs" style={{ overflow: 'hidden' }}>
           <Group justify="space-between" mb="md">
             <Title order={6}>Telemetry</Title>

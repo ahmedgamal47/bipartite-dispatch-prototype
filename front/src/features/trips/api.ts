@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from '@tanstack/react-query'
 import { httpClient } from '@/lib/httpClient'
 import type { LocationValue } from '@/types/maps'
 import type { TripRequest } from '@/types/dispatch'
@@ -11,15 +11,21 @@ export type CreateTripPayload = {
   tags?: string[]
 }
 
-const TRIPS_KEY = ['trips']
+const TRIPS_KEY = ['trips'] as const
 
-export const useTripsQuery = () =>
+type TripsQueryOptions = Omit<
+  UseQueryOptions<TripRequest[], Error, TripRequest[], typeof TRIPS_KEY>,
+  'queryKey' | 'queryFn'
+>
+
+export const useTripsQuery = (options?: TripsQueryOptions) =>
   useQuery({
     queryKey: TRIPS_KEY,
     queryFn: async (): Promise<TripRequest[]> => {
       const { data } = await httpClient.get('/trips')
       return data
     },
+    ...options,
   })
 
 export const useCreateTripMutation = () => {
@@ -35,4 +41,3 @@ export const useCreateTripMutation = () => {
     },
   })
 }
-

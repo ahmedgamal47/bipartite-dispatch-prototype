@@ -8,6 +8,7 @@ import { OffersPage } from './pages/OffersPage'
 import { TelemetryPage } from './pages/TelemetryPage'
 import { DriverGeneratorPage } from './pages/DriverGeneratorPage'
 import { TripGeneratorPage } from './pages/TripGeneratorPage'
+import { LiveMapPage } from './pages/LiveMapPage'
 
 const App = () => {
   return (
@@ -16,6 +17,7 @@ const App = () => {
         <Routes>
           <Route path="/" element={<OverviewPage />} />
           <Route path="/drivers" element={<DriversPage />} />
+          <Route path="/live-map" element={<LiveMapPage />} />
           <Route path="/riders" element={<RidersPage />} />
           <Route path="/trips" element={<TripsPage />} />
           <Route path="/trips/generator" element={<TripGeneratorPage />} />

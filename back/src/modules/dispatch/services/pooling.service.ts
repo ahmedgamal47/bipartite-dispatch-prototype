@@ -34,7 +34,7 @@ export class PoolingService {
   }
 
   getPools() {
-    return Array.from(this.pools.values())
+    return Array.from(this.pools.values()).filter((batch) => batch.trips.length > 0)
   }
 
   async flush(h3Index?: string) {
@@ -49,6 +49,14 @@ export class PoolingService {
 
       const result = await this.matchingService.solve(batch)
       results.push(result)
+
+      const requeueEntries: PoolEntry[] = batch.trips
+        .filter((trip) => result.unassigned.includes(trip.id))
+        .map((trip) => ({
+          ...trip,
+          status: 'queued',
+          updatedAt: new Date().toISOString(),
+        }))
 
       this.telemetryService.push({
         type: 'pool_flushed',
@@ -73,9 +81,8 @@ export class PoolingService {
         },
       })
 
-      batch.trips = []
-      batch.windowStart = new Date().toISOString()
-      batch.updatedAt = batch.windowStart
+      this.pools.delete(key)
+      requeueEntries.forEach((entry) => this.queueTrip(entry))
     }
 
     if (!results.length) {
