@@ -1,14 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { httpClient } from '@/lib/httpClient'
-import type { TripRequest } from '@/types/dispatch'
-
-export type MatchingAssignment = {
-  tripId: string
-  driverId: string
-  driverName: string
-  driverStatus: string
-  distanceMeters: number
-}
+import type { TripRequest, MatchingAssignment } from '@/types/dispatch'
 
 export type MatchingResult = {
   h3Index: string

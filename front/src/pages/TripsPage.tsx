@@ -24,6 +24,7 @@ import {
   useDispatchPoolsQuery,
   useDispatchTelemetryQuery,
   useFlushPoolsMutation,
+  type MatchingResult,
 } from '@/features/dispatch/api'
 
 const TRIP_STATUSES: TripRequest['status'][] = [
@@ -60,6 +61,7 @@ export const TripsPage = () => {
   const [pickupLocation, setPickupLocation] = useState<LocationValue | null>(null)
   const [dropoffLocation, setDropoffLocation] = useState<LocationValue | null>(null)
   const [status, setStatus] = useState<TripRequest['status']>('queued')
+  const [lastResults, setLastResults] = useState<MatchingResult[]>([])
 
   const riderOptions = useMemo(
     () =>
@@ -92,6 +94,7 @@ export const TripsPage = () => {
       {},
       {
         onSuccess: (results) => {
+          setLastResults(results)
           const assignmentCount = results.reduce((acc, result) => acc + result.assignments.length, 0)
           const unmatchedCount = results.reduce((acc, result) => acc + result.unassigned.length, 0)
 
@@ -236,6 +239,65 @@ export const TripsPage = () => {
             )}
           </Table.Tbody>
         </Table>
+        </Paper>
+
+        <Paper withBorder radius="md" p="md" shadow="xs" style={{ overflow: 'hidden' }}>
+          <Group justify="space-between" mb="md">
+            <Title order={6}>Latest Matching Results</Title>
+            {lastResults.length > 0 && (
+              <Text size="xs" c="dimmed">
+                {lastResults.length} batches · Last run {formatTimestamp(lastResults[0].generatedAt)}
+              </Text>
+            )}
+          </Group>
+          {lastResults.length ? (
+            <ScrollArea h={200} type="auto">
+              <Stack gap="sm">
+                {lastResults.map((result) => (
+                  <Paper key={`${result.h3Index}-${result.generatedAt}`} withBorder radius="md" p="sm">
+                    <Group justify="space-between" align="flex-start">
+                      <Stack gap={4}>
+                        <Text fw={600}>H3 {result.h3Index}</Text>
+                        <Text size="xs" c="dimmed">
+                          Strategy: {result.strategy} · Drivers considered: {result.metadata.driversConsidered}
+                        </Text>
+                      </Stack>
+                      <Text size="xs" c="dimmed">
+                        Generated {formatTimestamp(result.generatedAt)}
+                      </Text>
+                    </Group>
+                    <Stack gap={4} mt="sm">
+                      {result.assignments.length ? (
+                        result.assignments.map((assignment) => (
+                          <Group key={assignment.tripId} justify="space-between">
+                            <Text size="sm">Trip {assignment.tripId}</Text>
+                            <Text size="sm" c="dimmed">
+                              Driver {assignment.driverName} ({assignment.driverStatus}) ·
+                              {' '}
+                              {assignment.distanceMeters} m
+                            </Text>
+                          </Group>
+                        ))
+                      ) : (
+                        <Text size="sm" c="dimmed">
+                          No assignments.
+                        </Text>
+                      )}
+                      {result.unassigned.length > 0 && (
+                        <Text size="xs" c="red">
+                          Unassigned: {result.unassigned.join(', ')}
+                        </Text>
+                      )}
+                    </Stack>
+                  </Paper>
+                ))}
+              </Stack>
+            </ScrollArea>
+          ) : (
+            <Text size="sm" c="dimmed">
+              Flush pools to see matching results.
+            </Text>
+          )}
         </Paper>
 
         <Paper withBorder radius="md" p="md" shadow="xs" style={{ overflow: 'hidden' }}>

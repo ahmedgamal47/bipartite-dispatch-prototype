@@ -63,3 +63,11 @@ export type OfferRecord = {
   responseMs?: number
   expiresAt: string
 }
+
+export type MatchingAssignment = {
+  tripId: string
+  driverId: string
+  driverName: string
+  driverStatus: DriverStatus
+  distanceMeters: number
+}
