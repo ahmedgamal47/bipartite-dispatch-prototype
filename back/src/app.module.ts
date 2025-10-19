@@ -8,6 +8,7 @@ import { DriversModule } from './modules/drivers/drivers.module'
 import { MapsModule } from './modules/maps/maps.module'
 import { RidersModule } from './modules/riders/riders.module'
 import { TripsModule } from './modules/trips/trips.module'
+import { DispatchModule } from './modules/dispatch/dispatch.module'
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { TripsModule } from './modules/trips/trips.module'
     DriversModule,
     MapsModule,
     RidersModule,
+    DispatchModule,
     TripsModule,
   ],
   controllers: [AppController],

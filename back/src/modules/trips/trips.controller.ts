@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@nestjs/common'
 import { ApiTags } from '@nestjs/swagger'
 import { CreateTripDto } from './dto/create-trip.dto'
 import { UpdateTripDto } from './dto/update-trip.dto'
@@ -27,5 +27,11 @@ export class TripsController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() payload: UpdateTripDto) {
     return this.tripsService.update(id, payload)
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  remove(@Param('id') id: string) {
+    return this.tripsService.remove(id)
   }
 }

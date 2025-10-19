@@ -23,6 +23,7 @@ export type RiderProfile = {
     lat: number
     lng: number
     address?: string
+    h3Index?: string
   }
   createdAt: string
 }
@@ -34,11 +35,13 @@ export type TripRequest = {
     lat: number
     lng: number
     address?: string
+    h3Index?: string
   }
   dropoff: {
     lat: number
     lng: number
     address?: string
+    h3Index?: string
   }
   status:
     | 'queued'
@@ -60,4 +63,3 @@ export type OfferRecord = {
   responseMs?: number
   expiresAt: string
 }
-
