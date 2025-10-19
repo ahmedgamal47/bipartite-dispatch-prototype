@@ -25,7 +25,7 @@ export type DispatchPool = {
 export type DispatchTelemetryEvent = {
   id: string
   timestamp: string
-  type: 'trip_queued' | 'pool_flushed' | 'matching_result'
+  type: 'trip_queued' | 'pool_flushed' | 'matching_result' | 'offer_created' | 'offer_accepted' | 'offer_declined' | 'offer_timeout'
   data: Record<string, unknown>
 }
 
@@ -46,7 +46,7 @@ export const useDispatchTelemetryQuery = () =>
   useQuery({
     queryKey: TELEMETRY_KEY,
     queryFn: async (): Promise<DispatchTelemetryEvent[]> => {
-      const { data } = await httpClient.get('/dispatch/telemetry')
+      const { data } = await httpClient.get('/dispatch/telemetry', { params: { limit: 100 } })
       return data
     },
     refetchInterval: 5000,
@@ -66,3 +66,5 @@ export const useFlushPoolsMutation = () => {
     },
   })
 }
+
+

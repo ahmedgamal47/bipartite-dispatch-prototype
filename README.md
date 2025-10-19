@@ -84,7 +84,7 @@ This is a condensed walk‑through of the flow implemented in the codebase. It m
 | `drivers`         | CRUD for drivers, bulk generator (random polygon sampling), H3 indexing of driver location.        |
 | `riders`          | CRUD for riders.                                                                                    |
 | `trips`           | Trip intake, update, bulk generator, conversion to `PoolEntry`, requeue helper.                    |
-| `dispatch`        | Pooling and matching services, telemetry service, dispatch controller endpoints.                   |
+| `dispatch`        | Pooling and matching services, persisted telemetry feed (`telemetry_event` collection), controllers.|
 | `offers`          | Offer creation, timeout handling, accept/decline endpoints; enforces driver reservation semantics. |
 | `common`          | H3 helper service (configurable resolution via `H3_RESOLUTION`).                                    |
 
@@ -106,7 +106,9 @@ This is a condensed walk‑through of the flow implemented in the codebase. It m
   * Accept/decline resets driver/trip status appropriately and clears timers.
 
 * **TelemetryService**
-  * In‑memory queue limited to 200 latest events for lightweight auditing.
+  * Persists each telemetry event to Mongo (collection limited to 200 newest entries).
+  * `GET /dispatch/telemetry?limit=100` returns the most recent events (default 50).
+  * Trips console + telemetry page poll this endpoint to display live counters.
 
 ### Environment Variables (`back/.env`)
 
@@ -216,3 +218,4 @@ Ideas for future iterations:
 5. **Geo Enhancements:** Integrate actual routing/ETA service (e.g., OSRM) to replace the simple Haversine distance blend.
 
 Use this README as a primer when opening new conversations—the sections above provide the necessary context about architecture, control flow, and how to operate the prototype end-to-end.
+

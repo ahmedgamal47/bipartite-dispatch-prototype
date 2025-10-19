@@ -6,10 +6,14 @@ import { MatchingService } from './services/matching.service';
 import { TelemetryService } from './services/telemetry.service';
 import { Driver, DriverSchema } from '../drivers/schemas/driver.schema';
 import { OffersModule } from '../offers/offers.module';
+import { TelemetryEventEntity, TelemetryEventSchema } from './schemas/telemetry-event.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Driver.name, schema: DriverSchema }]),
+    MongooseModule.forFeature([
+      { name: Driver.name, schema: DriverSchema },
+      { name: TelemetryEventEntity.name, schema: TelemetryEventSchema },
+    ]),
     forwardRef(() => OffersModule),
   ],
   providers: [PoolingService, MatchingService, TelemetryService],

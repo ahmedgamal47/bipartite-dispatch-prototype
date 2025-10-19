@@ -68,7 +68,14 @@ export type MatchingCandidateScore = {
   isCandidate: boolean
 }
 
-export type TelemetryEventType = 'trip_queued' | 'pool_flushed' | 'matching_result'
+export type TelemetryEventType =
+  | 'trip_queued'
+  | 'pool_flushed'
+  | 'matching_result'
+  | 'offer_created'
+  | 'offer_accepted'
+  | 'offer_declined'
+  | 'offer_timeout'
 
 export type TelemetryEvent = {
   id: string

@@ -22,7 +22,7 @@ export class PoolingService {
     batch.trips.push(entry)
     batch.updatedAt = new Date().toISOString()
 
-    this.telemetryService.push({
+    void this.telemetryService.push({
       type: 'trip_queued',
       data: {
         h3Index: poolIndex,
@@ -58,7 +58,7 @@ export class PoolingService {
           updatedAt: new Date().toISOString(),
         }))
 
-      this.telemetryService.push({
+      await this.telemetryService.push({
         type: 'pool_flushed',
         data: {
           h3Index: key,
@@ -70,7 +70,7 @@ export class PoolingService {
 
       await this.offersService.createForMatching(result)
 
-      this.telemetryService.push({
+      await this.telemetryService.push({
         type: 'matching_result',
         data: {
           h3Index: key,

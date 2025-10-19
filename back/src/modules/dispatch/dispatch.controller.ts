@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
 import { PoolingService } from './services/pooling.service';
 import { TelemetryService } from './services/telemetry.service';
 
@@ -25,7 +25,10 @@ export class DispatchController {
   }
 
   @Get('telemetry')
-  getTelemetry() {
-    return this.telemetryService.getEvents();
+  getTelemetry(@Query('limit') limit?: string) {
+    const parsedLimit = Number.parseInt(limit ?? '', 10);
+    return this.telemetryService.getEvents(
+      Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 50,
+    );
   }
 }

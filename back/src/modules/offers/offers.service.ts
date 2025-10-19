@@ -7,6 +7,7 @@ import { MatchingResult, PoolEntry } from '../dispatch/types';
 import { Trip, TripDocument, TripStatus } from '../trips/schemas/trip.schema';
 import { Driver, DriverDocument } from '../drivers/schemas/driver.schema';
 import { PoolingService } from '../dispatch/services/pooling.service';
+import { TelemetryService } from '../dispatch/services/telemetry.service';
 
 @Injectable()
 export class OffersService {
@@ -20,6 +21,8 @@ export class OffersService {
     private readonly driverModel: Model<DriverDocument>,
     @Inject(forwardRef(() => PoolingService))
     private readonly poolingService: PoolingService,
+    @Inject(forwardRef(() => TelemetryService))
+    private readonly telemetryService: TelemetryService,
     private readonly configService: ConfigService,
   ) {
     const raw = this.configService.get<string | number>(
@@ -103,14 +106,21 @@ export class OffersService {
 
     if (offers.length) {
       const inserted = await this.offerModel.insertMany(offers);
-      // Mark trips as offering
       await this.tripModel.updateMany(
         { _id: { $in: offers.map((offer) => offer.tripId) } },
         { $set: { status: 'offering' } },
       );
 
-      // Trip statuses updated when offers created
-      inserted.forEach((doc) => this.registerExpirationTimer(doc));
+      for (const doc of inserted) {
+        this.registerExpirationTimer(doc);
+        await this.telemetryService.push({
+          type: 'offer_created',
+          data: {
+            ...this.offerTelemetryBase(doc),
+            expiresAt: doc.expiresAt ? doc.expiresAt.toISOString() : undefined,
+          },
+        });
+      }
     }
 
     if (tripsToRequeue.length) {
@@ -170,6 +180,20 @@ export class OffersService {
         this.poolingService.queueTrip(this.toPoolEntry(trip));
       }
     }
+
+    const createdAtDate = this.extractDate(offer, 'createdAt');
+    const respondedAtDate = this.extractDate(offer, 'respondedAt') ?? new Date();
+    const responseMs = createdAtDate
+      ? respondedAtDate.getTime() - createdAtDate.getTime()
+      : undefined;
+
+    await this.telemetryService.push({
+      type: status === 'accepted' ? 'offer_accepted' : 'offer_declined',
+      data: {
+        ...this.offerTelemetryBase(offer),
+        responseMs,
+      },
+    });
 
     return offer.toObject();
   }
@@ -241,10 +265,52 @@ export class OffersService {
 
     this.clearExpirationTimer(offerId);
 
+    const createdAtDate = this.extractDate(offer, 'createdAt');
+    const timeoutMs = createdAtDate ? Date.now() - createdAtDate.getTime() : undefined;
+
+    await this.telemetryService.push({
+      type: 'offer_timeout',
+      data: {
+        ...this.offerTelemetryBase(offer),
+        timeoutMs,
+      },
+    });
+
     const trip = await this.tripModel.findById(offer.tripId).exec();
     if (trip) {
       this.poolingService.queueTrip(this.toPoolEntry(trip));
     }
+  }
+
+  private extractDate(source: any, key: string): Date | undefined {
+    if (!source) {
+      return undefined;
+    }
+
+    let value: any;
+    if (typeof source.get === 'function') {
+      value = source.get(key);
+    } else {
+      value = source[key];
+    }
+
+    if (value instanceof Date) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+    }
+    return undefined;
+  }
+
+  private offerTelemetryBase(offer: OfferDocument) {
+    const tripId = offer.tripId instanceof Types.ObjectId ? offer.tripId.toString() : offer.tripId;
+    return {
+      offerId: offer._id.toString(),
+      tripId,
+      driverId: offer.driverId,
+    };
   }
 
   private toPoolEntry(trip: TripDocument): PoolEntry {
@@ -284,3 +350,4 @@ export class OffersService {
     };
   }
 }
+
