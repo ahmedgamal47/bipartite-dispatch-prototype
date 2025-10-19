@@ -5,6 +5,7 @@ import {
   Paper,
   Select,
   Stack,
+  Switch,
   Text,
   TextInput,
 } from '@mantine/core'
@@ -39,6 +40,7 @@ export const LocationPicker = ({
   const [searchQuery, setSearchQuery] = useState('')
   const [results, setResults] = useState<GeocodeResult[]>([])
   const [selectedResultValue, setSelectedResultValue] = useState<string | null>(null)
+  const [showH3Cells, setShowH3Cells] = useState(false)
   const geocodeSearch = useGeocodeSearch()
   const autoId = useId()
   const canvasKey = mapId ?? autoId
@@ -146,11 +148,20 @@ export const LocationPicker = ({
         />
       ) : null}
       <TextInput label="Selection" value={summary} readOnly />
+      <Group justify="flex-end">
+        <Switch
+          size="sm"
+          label="Show H3 cells"
+          checked={showH3Cells}
+          onChange={(event) => setShowH3Cells(event.currentTarget.checked)}
+        />
+      </Group>
       <Paper withBorder radius="md" p="xs" style={{ height }}>
         <MapCanvas
           selectedPoint={value ?? undefined}
           onSelectPoint={handleMapSelect}
           staticPoints={referenceValue ? [referenceValue] : undefined}
+          showH3Cells={showH3Cells}
           key={canvasKey}
         />
       </Paper>

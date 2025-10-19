@@ -39,6 +39,7 @@ export type MatchingResult = {
   metadata: {
     driversConsidered: number
   }
+  scorecards: MatchingScorecard[]
 }
 
 export type MatchingAssignment = {
@@ -47,6 +48,24 @@ export type MatchingAssignment = {
   driverName: string
   driverStatus: DriverStatus
   distanceMeters: number
+}
+
+export type MatchingScorecard = {
+  tripId: string
+  riderId: string
+  candidates: MatchingCandidateScore[]
+}
+
+export type MatchingCandidateScore = {
+  driverId: string
+  driverName: string
+  driverStatus: DriverStatus
+  distanceMeters: number
+  distanceScore: number
+  rating: number
+  ratingScore: number
+  blendedCost: number
+  isCandidate: boolean
 }
 
 export type TelemetryEventType = 'trip_queued' | 'pool_flushed' | 'matching_result'

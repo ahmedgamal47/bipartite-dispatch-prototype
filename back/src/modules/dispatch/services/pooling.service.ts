@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import type { PoolBatch, PoolEntry } from '../types'
 import { MatchingService } from './matching.service'
 import { TelemetryService } from './telemetry.service'
+import { OffersService } from '../../offers/offers.service'
 
 @Injectable()
 export class PoolingService {
@@ -11,6 +12,7 @@ export class PoolingService {
   constructor(
     private readonly matchingService: MatchingService,
     private readonly telemetryService: TelemetryService,
+    private readonly offersService: OffersService,
   ) {}
 
   queueTrip(entry: PoolEntry) {
@@ -57,6 +59,8 @@ export class PoolingService {
           unassigned: result.unassigned,
         },
       })
+
+      await this.offersService.createForMatching(result)
 
       this.telemetryService.push({
         type: 'matching_result',

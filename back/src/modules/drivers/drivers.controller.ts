@@ -34,4 +34,15 @@ export class DriversController {
   remove(@Param('id') id: string) {
     return this.driversService.remove(id)
   }
+
+  @Post('generate')
+  generate(@Body() payload: { count: number; polygon: [number, number][] }) {
+    return this.driversService.bulkCreate(payload.count, payload.polygon)
+  }
+
+  @Delete()
+  @HttpCode(204)
+  removeAll() {
+    return this.driversService.removeAll()
+  }
 }

@@ -2,7 +2,8 @@ import { Box } from '@mantine/core'
 import L from 'leaflet'
 import type { LatLngExpression, LeafletEventHandlerFnMap, LeafletMouseEvent } from 'leaflet'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MapContainer, Marker, TileLayer, useMapEvents } from 'react-leaflet'
+import { MapContainer, Marker, Polygon, TileLayer, useMapEvents } from 'react-leaflet'
+import { cellToBoundary, latLngToCell } from 'h3-js'
 
 import 'leaflet/dist/leaflet.css'
 
@@ -16,7 +17,11 @@ type MapCanvasProps = {
   selectedPoint?: { lng: number; lat: number }
   onSelectPoint?: (coords: { lng: number; lat: number }) => void
   staticPoints?: Array<{ lng: number; lat: number }>
+  showH3Cells?: boolean
 }
+
+const h3ResolutionEnv = Number.parseInt(import.meta.env.VITE_H3_RESOLUTION ?? '', 10)
+const H3_RESOLUTION = Number.isFinite(h3ResolutionEnv) ? h3ResolutionEnv : 8
 
 // Configure default marker assets once per bundle load.
 const defaultMarkerIcon = L.icon({
@@ -55,6 +60,7 @@ export const MapCanvas = ({
   selectedPoint,
   onSelectPoint,
   staticPoints,
+  showH3Cells = false,
 }: MapCanvasProps) => {
   const fallbackLat = center[1]
   const fallbackLng = center[0]
@@ -128,6 +134,19 @@ export const MapCanvas = ({
     })
   }, [staticPoints, markerPosition, fallbackLat, fallbackLng])
 
+  const resolvedCenter = useMemo(() => {
+    if (markerPosition) {
+      if (Array.isArray(markerPosition)) {
+        return { lat: markerPosition[0], lng: markerPosition[1] }
+      }
+      if ('lat' in markerPosition && 'lng' in markerPosition) {
+        const typed = markerPosition as L.LatLng
+        return { lat: typed.lat, lng: typed.lng }
+      }
+    }
+    return { lat: fallbackLat, lng: fallbackLng }
+  }, [markerPosition, fallbackLat, fallbackLng])
+
   const markerKey = useMemo(() => {
     if (!markerPosition) {
       return 'marker-none'
@@ -151,6 +170,42 @@ export const MapCanvas = ({
       }
     : undefined
 
+  const hexPolygons = useMemo(() => {
+    if (!showH3Cells) {
+      return []
+    }
+    const points: Array<{ lat: number; lng: number }> = []
+    if (selectedPoint) {
+      points.push({ lat: selectedPoint.lat, lng: selectedPoint.lng })
+    }
+    if (staticPoints?.length) {
+      for (const point of staticPoints) {
+        points.push({ lat: point.lat, lng: point.lng })
+      }
+    }
+
+    if (points.length === 0) {
+      points.push(resolvedCenter)
+    }
+
+    const unique = new Map<string, LatLngExpression[]>()
+
+    for (const point of points) {
+      try {
+        const index = latLngToCell(point.lat, point.lng, H3_RESOLUTION)
+        if (unique.has(index)) {
+          continue
+        }
+        const boundary = cellToBoundary(index).map(([lat, lng]) => [lat, lng] as LatLngExpression)
+        unique.set(index, boundary)
+      } catch (error) {
+        console.warn('Failed to build H3 cell for point', point, error)
+      }
+    }
+
+    return Array.from(unique.entries())
+  }, [selectedPoint?.lat, selectedPoint?.lng, staticPoints, showH3Cells, resolvedCenter.lat, resolvedCenter.lng])
+
   return (
     <Box style={{ width: '100%', height: '100%', borderRadius: '12px', overflow: 'hidden' }}>
       <MapContainer
@@ -164,6 +219,14 @@ export const MapCanvas = ({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <ClickHandler onSelectPoint={submitSelection} />
+        {showH3Cells &&
+          hexPolygons.map(([index, boundary]) => (
+            <Polygon
+              key={`h3-${index}`}
+              positions={boundary}
+              pathOptions={{ color: '#2f9e44', weight: 1, fillOpacity: 0.1 }}
+            />
+          ))}
         {filteredStaticPoints.map((point, index) => (
           <Marker
             key={`static-${index}-${point.lat}-${point.lng}`}

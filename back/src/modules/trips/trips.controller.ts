@@ -34,4 +34,15 @@ export class TripsController {
   remove(@Param('id') id: string) {
     return this.tripsService.remove(id)
   }
+
+  @Delete()
+  @HttpCode(204)
+  removeAll() {
+    return this.tripsService.removeAll()
+  }
+
+  @Post('generate')
+  generate(@Body() payload: { count: number; polygon: [number, number][]; riderIds?: string[] }) {
+    return this.tripsService.bulkGenerate(payload.count, payload.polygon, payload.riderIds)
+  }
 }

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import { Model, Types } from 'mongoose'
 import { H3Service } from '../../common/h3.service'
@@ -102,6 +102,66 @@ export class TripsService {
     await trip.deleteOne()
   }
 
+  async removeAll() {
+    await this.tripModel.deleteMany({}).exec()
+  }
+
+  async bulkGenerate(count: number, coordinates: [number, number][], riderIds?: string[]) {
+    if (coordinates.length < 3) {
+      throw new BadRequestException('Polygon must have at least three points')
+    }
+
+    const riderFilter = riderIds && riderIds.length ? { _id: { $in: riderIds.map((id) => new Types.ObjectId(id)) } } : {}
+    const riders = await this.riderModel.find(riderFilter).lean().exec()
+
+    if (!riders.length) {
+      throw new BadRequestException('No riders available for trip generation')
+    }
+
+    const documents: TripDocument[] = []
+
+    for (let i = 0; i < count; i++) {
+      const rider = riders[Math.floor(Math.random() * riders.length)]
+      const pickupPoint = this.randomPointInPolygon(coordinates)
+      let dropoffPoint = this.randomPointInPolygon(coordinates)
+
+      // ensure dropoff differs meaningfully from pickup
+      if (Math.abs(dropoffPoint[0] - pickupPoint[0]) < 1e-6 && Math.abs(dropoffPoint[1] - pickupPoint[1]) < 1e-6) {
+        dropoffPoint = this.randomPointInPolygon(coordinates)
+      }
+
+      const pickupH3 = this.h3Service.indexFor(pickupPoint[1], pickupPoint[0])
+      const dropoffH3 = this.h3Service.indexFor(dropoffPoint[1], dropoffPoint[0])
+
+      const trip = new this.tripModel({
+        riderId: rider._id,
+        pickup: {
+          lat: pickupPoint[1],
+          lng: pickupPoint[0],
+          h3Index: pickupH3,
+        },
+        dropoff: {
+          lat: dropoffPoint[1],
+          lng: dropoffPoint[0],
+          h3Index: dropoffH3,
+        },
+        status: 'queued',
+        tags: ['generated'],
+      })
+
+      documents.push(trip)
+    }
+
+    if (!documents.length) {
+      return 0
+    }
+
+    const inserted = await this.tripModel.insertMany(documents)
+
+    inserted.forEach((doc) => this.poolingService.queueTrip(this.asPoolEntry(doc.toObject())))
+    return inserted.length
+  }
+
   private asPoolEntry(doc: any): PoolEntry {
     return {
       id: doc.id,
@@ -123,5 +183,38 @@ export class TripsService {
       createdAt: new Date(doc.createdAt).toISOString(),
       updatedAt: new Date(doc.updatedAt).toISOString(),
     }
+  }
+
+  private randomPointInPolygon(polygon: [number, number][]) {
+    const [minLng, maxLng] = polygon.reduce(
+      (acc, [lng]) => [Math.min(acc[0], lng), Math.max(acc[1], lng)],
+      [polygon[0][0], polygon[0][0]],
+    )
+    const [minLat, maxLat] = polygon.reduce(
+      (acc, [, lat]) => [Math.min(acc[0], lat), Math.max(acc[1], lat)],
+      [polygon[0][1], polygon[0][1]],
+    )
+
+    while (true) {
+      const lng = minLng + Math.random() * (maxLng - minLng)
+      const lat = minLat + Math.random() * (maxLat - minLat)
+      if (this.pointInPolygon([lng, lat], polygon)) {
+        return [lng, lat] as [number, number]
+      }
+    }
+  }
+
+  private pointInPolygon(point: [number, number], polygon: [number, number][]) {
+    const [x, y] = point
+    let inside = false
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i][0]
+      const yi = polygon[i][1]
+      const xj = polygon[j][0]
+      const yj = polygon[j][1]
+      const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi
+      if (intersect) inside = !inside
+    }
+    return inside
   }
 }

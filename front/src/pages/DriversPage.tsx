@@ -30,6 +30,7 @@ import {
 } from '@/features/drivers/api'
 import type { DriverProfile, DriverStatus } from '@/types/dispatch'
 import type { LocationValue } from '@/types/maps'
+import { httpClient } from '@/lib/httpClient'
 
 const STATUS_OPTIONS: { value: DriverStatus; label: string; color: string }[] = [
   { value: 'available', label: 'Available', color: 'green' },
@@ -240,6 +241,40 @@ export const DriversPage = () => {
                   Cancel
                 </Button>
               )}
+              <Button
+                color="red"
+                variant="light"
+                loading={deleteDriver.isPending}
+                onClick={() =>
+                  modals.openConfirmModal({
+                    title: 'Remove all drivers?',
+                    centered: true,
+                    labels: { confirm: 'Delete all', cancel: 'Cancel' },
+                    confirmProps: { color: 'red' },
+                    children: (
+                      <Text size="sm">
+                        This will permanently remove every driver. Are you sure?
+                      </Text>
+                    ),
+                    onConfirm: async () => {
+                      try {
+                        await httpClient.delete('/drivers')
+                        notifications.show({
+                          title: 'Drivers removed',
+                          message: 'All drivers have been deleted.',
+                          color: 'red',
+                        })
+                        driversQuery.refetch()
+                      } catch (error: unknown) {
+                        const message = error instanceof Error ? error.message : 'Unable to delete drivers'
+                        notifications.show({ title: 'Delete all failed', message, color: 'red' })
+                      }
+                    },
+                  })
+                }
+              >
+                Delete All
+              </Button>
             </Group>
           </Stack>
         </form>

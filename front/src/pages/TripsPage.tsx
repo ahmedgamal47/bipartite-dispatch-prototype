@@ -12,9 +12,12 @@ import {
   Table,
   Text,
   Title,
+  Modal,
 } from '@mantine/core'
+import { useDisclosure } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
 import { useMemo, useState } from 'react'
+import { modals } from '@mantine/modals'
 import { LocationPicker } from '@/components/location/LocationPicker'
 import { useRidersQuery } from '@/features/riders/api'
 import { useCreateTripMutation, useTripsQuery } from '@/features/trips/api'
@@ -26,6 +29,8 @@ import {
   useFlushPoolsMutation,
   type MatchingResult,
 } from '@/features/dispatch/api'
+import { useOffersQuery, useRespondOfferMutation } from '@/features/offers/api'
+import { httpClient } from '@/lib/httpClient'
 
 const TRIP_STATUSES: TripRequest['status'][] = [
   'queued',
@@ -56,12 +61,38 @@ export const TripsPage = () => {
   const poolsQuery = useDispatchPoolsQuery()
   const telemetryQuery = useDispatchTelemetryQuery()
   const flushPools = useFlushPoolsMutation()
+  const offersQuery = useOffersQuery()
+  const respondOffer = useRespondOfferMutation()
 
   const [selectedRider, setSelectedRider] = useState<string | null>(null)
   const [pickupLocation, setPickupLocation] = useState<LocationValue | null>(null)
   const [dropoffLocation, setDropoffLocation] = useState<LocationValue | null>(null)
   const [status, setStatus] = useState<TripRequest['status']>('queued')
   const [lastResults, setLastResults] = useState<MatchingResult[]>([])
+  const [opened, { open, close }] = useDisclosure(false)
+  const [selectedResultIndex, setSelectedResultIndex] = useState<number | null>(null)
+  const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
+
+  const openScorecard = (resultIndex: number, tripId: string) => {
+    setSelectedResultIndex(resultIndex)
+    setSelectedTripId(tripId)
+    open()
+  }
+
+  const closeScorecard = () => {
+    setSelectedResultIndex(null)
+    setSelectedTripId(null)
+    close()
+  }
+
+  const activeScorecard = useMemo(() => {
+    if (selectedResultIndex === null || selectedTripId === null) {
+      return null
+    }
+
+    const result = lastResults[selectedResultIndex]
+    return result?.scorecards.find((card) => card.tripId === selectedTripId) ?? null
+  }, [lastResults, selectedResultIndex, selectedTripId])
 
   const riderOptions = useMemo(
     () =>
@@ -112,6 +143,20 @@ export const TripsPage = () => {
     )
   }
 
+  const handleRespondOffer = async (id: string, status: 'accepted' | 'declined') => {
+    try {
+      await respondOffer.mutateAsync({ id, status })
+      notifications.show({
+        title: `Offer ${status}`,
+        message: `Offer ${id} marked as ${status}.`,
+        color: status === 'accepted' ? 'green' : 'yellow',
+      })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unable to respond to offer'
+      notifications.show({ title: 'Offer error', message, color: 'red' })
+    }
+  }
+
   const handleSubmit = async () => {
     if (!selectedRider || !pickupLocation || !dropoffLocation) {
       notifications.show({
@@ -151,7 +196,8 @@ export const TripsPage = () => {
   }
 
   return (
-    <Flex gap="xl" align="stretch" h="100%">
+    <>
+      <Flex gap="xl" align="stretch" h="100%">
       <Paper shadow="xs" radius="md" p="xl" withBorder flex="1">
         <Stack gap="md">
           <Title order={4}>Request Trip</Title>
@@ -188,9 +234,42 @@ export const TripsPage = () => {
             mapId="trip-dropoff"
           />
           <Divider />
-          <Button radius="md" onClick={handleSubmit} disabled={!canSubmit} loading={createTrip.isPending}>
-            Submit Trip Request
-          </Button>
+          <Group>
+            <Button radius="md" onClick={handleSubmit} disabled={!canSubmit} loading={createTrip.isPending}>
+              Submit Trip Request
+            </Button>
+            <Button
+              variant="light"
+              color="red"
+              onClick={() =>
+                modals.openConfirmModal({
+                  title: 'Remove all trips?',
+                  centered: true,
+                  labels: { confirm: 'Delete all', cancel: 'Cancel' },
+                  confirmProps: { color: 'red' },
+                  children: (
+                    <Text size="sm">This will permanently remove every trip. Are you sure?</Text>
+                  ),
+                  onConfirm: async () => {
+                    try {
+                      await httpClient.delete('/trips')
+                      notifications.show({
+                        title: 'Trips removed',
+                        message: 'All trips have been deleted.',
+                        color: 'red',
+                      })
+                      tripsQuery.refetch()
+                    } catch (error: unknown) {
+                      const message = error instanceof Error ? error.message : 'Unable to delete trips'
+                      notifications.show({ title: 'Delete all failed', message, color: 'red' })
+                    }
+                  },
+                })
+              }
+            >
+              Delete All Trips
+            </Button>
+          </Group>
         </Stack>
       </Paper>
       <Stack flex={1.3} gap="md">
@@ -200,45 +279,94 @@ export const TripsPage = () => {
             {tripsQuery.isFetching && <Loader size="sm" />}
           </Group>
           <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Trip</Table.Th>
-              <Table.Th>Rider</Table.Th>
-              <Table.Th>Pickup</Table.Th>
-              <Table.Th>Dropoff</Table.Th>
-              <Table.Th>Status</Table.Th>
-              <Table.Th>Created</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {tripsQuery.data?.length ? (
-              tripsQuery.data.map((trip) => (
-                <Table.Tr key={trip.id}>
-                  <Table.Td>{trip.id}</Table.Td>
-                  <Table.Td>{riderLabelById.get(trip.riderId) ?? trip.riderId}</Table.Td>
-                  <Table.Td>
-                    {trip.pickup.address ?? `${trip.pickup.lat.toFixed(4)}, ${trip.pickup.lng.toFixed(4)}`}
-                  </Table.Td>
-                  <Table.Td>
-                    {trip.dropoff.address ?? `${trip.dropoff.lat.toFixed(4)}, ${trip.dropoff.lng.toFixed(4)}`}
-                  </Table.Td>
-                  <Table.Td>
-                    <Pill color={statusColor[trip.status]}>{trip.status.toUpperCase()}</Pill>
-                  </Table.Td>
-                  <Table.Td>{formatTimestamp(trip.createdAt)}</Table.Td>
-                </Table.Tr>
-              ))
-            ) : (
+            <Table.Thead>
               <Table.Tr>
-                <Table.Td colSpan={6}>
-                  <Text ta="center" c="dimmed">
-                    {tripsQuery.isLoading ? 'Loading trips…' : 'No trips yet. Submit one to get started.'}
-                  </Text>
-                </Table.Td>
+                <Table.Th>Trip</Table.Th>
+                <Table.Th>Rider</Table.Th>
+                <Table.Th>Pickup</Table.Th>
+                <Table.Th>Dropoff</Table.Th>
+                <Table.Th>Status</Table.Th>
+                <Table.Th>Created</Table.Th>
               </Table.Tr>
-            )}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {tripsQuery.data?.length ? (
+                tripsQuery.data.map((trip) => (
+                  <Table.Tr key={trip.id}>
+                    <Table.Td>{trip.id}</Table.Td>
+                    <Table.Td>{riderLabelById.get(trip.riderId) ?? trip.riderId}</Table.Td>
+                    <Table.Td>
+                      {trip.pickup.address ?? `${trip.pickup.lat.toFixed(4)}, ${trip.pickup.lng.toFixed(4)}`}
+                    </Table.Td>
+                    <Table.Td>
+                      {trip.dropoff.address ?? `${trip.dropoff.lat.toFixed(4)}, ${trip.dropoff.lng.toFixed(4)}`}
+                    </Table.Td>
+                    <Table.Td>
+                      <Pill color={statusColor[trip.status]}>{trip.status.toUpperCase()}</Pill>
+                    </Table.Td>
+                    <Table.Td>{formatTimestamp(trip.createdAt)}</Table.Td>
+                  </Table.Tr>
+                ))
+              ) : (
+                <Table.Tr>
+                  <Table.Td colSpan={6}>
+                    <Text ta="center" c="dimmed">
+                      {tripsQuery.isLoading ? 'Loading trips…' : 'No trips yet. Submit one to get started.'}
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
+              )}
+            </Table.Tbody>
+          </Table>
+        </Paper>
+
+        <Paper withBorder radius="md" p="md" shadow="xs" style={{ overflow: 'hidden' }}>
+          <Group justify="space-between" mb="md">
+            <Title order={6}>Pending Offers</Title>
+            {offersQuery.isFetching && <Loader size="sm" />}
+          </Group>
+          <ScrollArea h={200} type="auto">
+            <Stack gap="xs">
+              {offersQuery.data?.length ? (
+                offersQuery.data.map((offer) => (
+                  <Paper key={offer.id} withBorder radius="md" p="sm">
+                    <Group justify="space-between">
+                      <Stack gap={2}>
+                        <Text fw={500}>Offer {offer.id}</Text>
+                        <Text size="xs" c="dimmed">
+                          Trip {offer.tripId} · Driver {offer.driverName} ({offer.driverStatus}) · {offer.distanceMeters} m
+                        </Text>
+                      </Stack>
+                      <Group gap="xs">
+                        <Button
+                          size="xs"
+                          color="green"
+                          variant="light"
+                          loading={respondOffer.isPending}
+                          onClick={() => handleRespondOffer(offer.id, 'accepted')}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          size="xs"
+                          color="red"
+                          variant="light"
+                          loading={respondOffer.isPending}
+                          onClick={() => handleRespondOffer(offer.id, 'declined')}
+                        >
+                          Decline
+                        </Button>
+                      </Group>
+                    </Group>
+                  </Paper>
+                ))
+              ) : (
+                <Text size="sm" c="dimmed">
+                  {offersQuery.isLoading ? 'Loading offers…' : 'No pending offers.'}
+                </Text>
+              )}
+            </Stack>
+          </ScrollArea>
         </Paper>
 
         <Paper withBorder radius="md" p="md" shadow="xs" style={{ overflow: 'hidden' }}>
@@ -253,7 +381,7 @@ export const TripsPage = () => {
           {lastResults.length ? (
             <ScrollArea h={200} type="auto">
               <Stack gap="sm">
-                {lastResults.map((result) => (
+                {lastResults.map((result, resultIndex) => (
                   <Paper key={`${result.h3Index}-${result.generatedAt}`} withBorder radius="md" p="sm">
                     <Group justify="space-between" align="flex-start">
                       <Stack gap={4}>
@@ -270,10 +398,15 @@ export const TripsPage = () => {
                       {result.assignments.length ? (
                         result.assignments.map((assignment) => (
                           <Group key={assignment.tripId} justify="space-between">
-                            <Text size="sm">Trip {assignment.tripId}</Text>
+                            <Button
+                              variant="subtle"
+                              size="xs"
+                              onClick={() => openScorecard(resultIndex, assignment.tripId)}
+                            >
+                              Trip {assignment.tripId}
+                            </Button>
                             <Text size="sm" c="dimmed">
-                              Driver {assignment.driverName} ({assignment.driverStatus}) ·
-                              {' '}
+                              Driver {assignment.driverName} ({assignment.driverStatus}) ·{' '}
                               {assignment.distanceMeters} m
                             </Text>
                           </Group>
@@ -284,9 +417,22 @@ export const TripsPage = () => {
                         </Text>
                       )}
                       {result.unassigned.length > 0 && (
-                        <Text size="xs" c="red">
-                          Unassigned: {result.unassigned.join(', ')}
-                        </Text>
+                        <Group gap="xs" wrap="wrap">
+                          <Text size="xs" c="red">
+                            Unassigned:
+                          </Text>
+                          {result.unassigned.map((tripId) => (
+                            <Button
+                              key={tripId}
+                              variant="subtle"
+                              size="xs"
+                              color="red"
+                              onClick={() => openScorecard(resultIndex, tripId)}
+                            >
+                              Trip {tripId}
+                            </Button>
+                          ))}
+                        </Group>
                       )}
                     </Stack>
                   </Paper>
@@ -366,6 +512,53 @@ export const TripsPage = () => {
           </ScrollArea>
         </Paper>
       </Stack>
-    </Flex>
+      </Flex>
+
+      <Modal
+        opened={opened}
+        onClose={closeScorecard}
+        title={`Scorecard${selectedTripId ? ` · Trip ${selectedTripId}` : ''}`}
+        size="lg"
+        withinPortal
+      >
+        {activeScorecard ? (
+          <Stack gap="sm">
+            <Text size="sm" c="dimmed">
+              Rider: {riderLabelById.get(activeScorecard.riderId) ?? activeScorecard.riderId}
+            </Text>
+            <Table striped highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Driver</Table.Th>
+                  <Table.Th>Status</Table.Th>
+                  <Table.Th>Distance (m)</Table.Th>
+                  <Table.Th>Distance Score</Table.Th>
+                  <Table.Th>Rating</Table.Th>
+                  <Table.Th>Rating Score</Table.Th>
+                  <Table.Th>Blended Cost</Table.Th>
+                  <Table.Th>Candidate</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {activeScorecard.candidates.map((candidate) => (
+                  <Table.Tr key={candidate.driverId}>
+                    <Table.Td>{candidate.driverName}</Table.Td>
+                    <Table.Td>{candidate.driverStatus}</Table.Td>
+                    <Table.Td>{candidate.distanceMeters}</Table.Td>
+                    <Table.Td>{candidate.distanceScore.toFixed(3)}</Table.Td>
+                    <Table.Td>{candidate.rating.toFixed(1)}</Table.Td>
+                    <Table.Td>{candidate.ratingScore.toFixed(3)}</Table.Td>
+                    <Table.Td>{candidate.blendedCost.toFixed(3)}</Table.Td>
+                    <Table.Td>{candidate.isCandidate ? '✔' : '—'}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Stack>
+        ) : (
+          <Text size="sm">Select a trip from the matching results to view details.</Text>
+        )}
+      </Modal>
+    </>
   )
 }

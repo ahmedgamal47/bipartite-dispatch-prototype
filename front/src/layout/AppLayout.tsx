@@ -8,19 +8,56 @@ import {
   Title,
 } from '@mantine/core'
 import type { PropsWithChildren } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink as RouterNavLink, useLocation } from 'react-router-dom'
 
-const navItems = [
-  { label: 'Overview', to: '/' },
-  { label: 'Drivers', to: '/drivers' },
-  { label: 'Riders', to: '/riders' },
-  { label: 'Trips', to: '/trips' },
-  { label: 'Offers', to: '/offers' },
-  { label: 'Telemetry', to: '/telemetry' },
+type NavItem =
+  | { label: string; to: string; key: string }
+  | { label: string; to?: string; key: string; children: Array<{ label: string; to: string; key: string }> }
+
+const navItems: NavItem[] = [
+  { label: 'Overview', to: '/', key: 'overview' },
+  {
+    label: 'Drivers',
+    key: 'drivers',
+    children: [
+      { label: 'Driver Console', to: '/drivers', key: 'drivers:console' },
+      { label: 'Driver Generator', to: '/drivers/generator', key: 'drivers:generator' },
+    ],
+  },
+  { label: 'Riders', to: '/riders', key: 'riders' },
+  {
+    label: 'Trips',
+    key: 'trips',
+    children: [
+      { label: 'Trip Console', to: '/trips', key: 'trips:console' },
+      { label: 'Trip Generator', to: '/trips/generator', key: 'trips:generator' },
+    ],
+  },
+  { label: 'Offers', to: '/offers', key: 'offers' },
+  { label: 'Telemetry', to: '/telemetry', key: 'telemetry' },
 ]
 
 export const AppLayout = ({ children }: PropsWithChildren) => {
   const location = useLocation()
+  const [openedSections, setOpenedSections] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    setOpenedSections((prev) => {
+      const next = { ...prev }
+      navItems.forEach((item) => {
+        if ('children' in item) {
+          const childActive = item.children.some((child) => location.pathname === child.to)
+          if (childActive) {
+            next[item.key] = true
+          } else if (next[item.key] === undefined) {
+            next[item.key] = false
+          }
+        }
+      })
+      return next
+    })
+  }, [location.pathname])
 
   return (
     <AppShell
@@ -43,17 +80,55 @@ export const AppLayout = ({ children }: PropsWithChildren) => {
           <Title order={4}>Dispatch POC</Title>
           <ScrollArea type="auto">
             <Stack gap="xs">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  component={RouterNavLink}
-                  to={item.to}
-                  label={item.label}
-                  active={location.pathname === item.to}
-                  variant="filled"
-                  c={location.pathname === item.to ? 'white' : undefined}
-                />
-              ))}
+              {navItems.map((item) => {
+                if ('children' in item) {
+                  const isChildActive = item.children.some((child) => location.pathname === child.to)
+                  const opened = openedSections[item.key] ?? false
+
+                  return (
+                    <NavLink
+                      key={item.key}
+                      label={item.label}
+                      active={isChildActive}
+                      variant="filled"
+                      c={isChildActive ? 'white' : undefined}
+                      opened={opened}
+                      rightSection={null}
+                      onClick={() =>
+                        setOpenedSections((prev) => ({
+                          ...prev,
+                          [item.key]: !opened,
+                        }))
+                      }
+                    >
+                      <Stack gap={4} pl="md">
+                        {item.children.map((child) => (
+                          <NavLink
+                            key={child.key}
+                            component={RouterNavLink}
+                            to={child.to}
+                            label={child.label}
+                            active={location.pathname === child.to}
+                            variant="subtle"
+                          />
+                        ))}
+                      </Stack>
+                    </NavLink>
+                  )
+                }
+
+                return (
+                  <NavLink
+                    key={item.key}
+                    component={RouterNavLink}
+                    to={item.to}
+                    label={item.label}
+                    active={location.pathname === item.to}
+                    variant="filled"
+                    c={location.pathname === item.to ? 'white' : undefined}
+                  />
+                )
+              })}
             </Stack>
           </ScrollArea>
         </Stack>

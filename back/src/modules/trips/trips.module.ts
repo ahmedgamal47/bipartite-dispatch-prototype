@@ -5,6 +5,7 @@ import { TripsService } from './trips.service'
 import { Trip, TripSchema } from './schemas/trip.schema'
 import { Rider, RiderSchema } from '../riders/schemas/rider.schema'
 import { DispatchModule } from '../dispatch/dispatch.module'
+import { OffersModule } from '../offers/offers.module'
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { DispatchModule } from '../dispatch/dispatch.module'
       { name: Rider.name, schema: RiderSchema },
     ]),
     DispatchModule,
+    OffersModule,
   ],
   controllers: [TripsController],
   providers: [TripsService],

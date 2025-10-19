@@ -5,9 +5,10 @@ import { PoolingService } from './services/pooling.service'
 import { MatchingService } from './services/matching.service'
 import { TelemetryService } from './services/telemetry.service'
 import { Driver, DriverSchema } from '../drivers/schemas/driver.schema'
+import { OffersModule } from '../offers/offers.module'
 
 @Module({
-  imports: [MongooseModule.forFeature([{ name: Driver.name, schema: DriverSchema }])],
+  imports: [MongooseModule.forFeature([{ name: Driver.name, schema: DriverSchema }]), OffersModule],
   providers: [PoolingService, MatchingService, TelemetryService],
   controllers: [DispatchController],
   exports: [PoolingService, MatchingService, TelemetryService],

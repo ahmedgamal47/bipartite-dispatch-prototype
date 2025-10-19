@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { httpClient } from '@/lib/httpClient'
-import type { TripRequest, MatchingAssignment } from '@/types/dispatch'
+import type { TripRequest, MatchingAssignment, MatchingScorecard } from '@/types/dispatch'
 
 export type MatchingResult = {
   h3Index: string
@@ -12,6 +12,7 @@ export type MatchingResult = {
   metadata: {
     driversConsidered: number
   }
+  scorecards: MatchingScorecard[]
 }
 
 export type DispatchPool = {

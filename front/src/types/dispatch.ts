@@ -59,9 +59,14 @@ export type OfferRecord = {
   id: string
   tripId: string
   driverId: string
+  driverName: string
+  driverStatus: DriverStatus
+  distanceMeters: number
   status: 'pending' | 'accepted' | 'declined' | 'expired'
-  responseMs?: number
-  expiresAt: string
+  createdAt: string
+  updatedAt: string
+  respondedAt?: string
+  expiresAt?: string
 }
 
 export type MatchingAssignment = {
@@ -70,4 +75,22 @@ export type MatchingAssignment = {
   driverName: string
   driverStatus: DriverStatus
   distanceMeters: number
+}
+
+export type MatchingCandidateScore = {
+  driverId: string
+  driverName: string
+  driverStatus: DriverStatus
+  distanceMeters: number
+  distanceScore: number
+  rating: number
+  ratingScore: number
+  blendedCost: number
+  isCandidate: boolean
+}
+
+export type MatchingScorecard = {
+  tripId: string
+  riderId: string
+  candidates: MatchingCandidateScore[]
 }
