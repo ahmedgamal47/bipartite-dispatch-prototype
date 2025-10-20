@@ -35,7 +35,7 @@ const navItems: NavItem[] = [
       { label: 'Trip Generator', to: '/trips/generator', key: 'trips:generator' },
     ],
   },
-  { label: 'Offers', to: '/offers', key: 'offers' },
+  // { label: 'Offers', to: '/offers', key: 'offers' },
   { label: 'Telemetry', to: '/telemetry', key: 'telemetry' },
 ]
 

@@ -16,7 +16,7 @@ import {
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { modals } from '@mantine/modals'
 import { LocationPicker } from '@/components/location/LocationPicker'
 import { useRidersQuery } from '@/features/riders/api'
@@ -54,6 +54,30 @@ const statusColor: Record<TripRequest['status'], string> = {
 
 const formatTimestamp = (value: string) => new Date(value).toLocaleString()
 
+const getRemainingTimeLabel = (expiresAt?: string, nowTs?: number) => {
+  if (!expiresAt) {
+    return { label: 'n/a', isExpired: false }
+  }
+
+  const expiresMs = new Date(expiresAt).getTime()
+  if (Number.isNaN(expiresMs)) {
+    return { label: 'n/a', isExpired: false }
+  }
+
+  const diffSeconds = Math.floor((expiresMs - (nowTs ?? Date.now())) / 1000)
+  if (diffSeconds <= 0) {
+    return { label: 'Expired', isExpired: true }
+  }
+
+  const minutes = Math.floor(diffSeconds / 60)
+  const seconds = diffSeconds % 60
+
+  return {
+    label: `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`,
+    isExpired: diffSeconds <= 10,
+  }
+}
+
 export const TripsPage = () => {
   const ridersQuery = useRidersQuery()
   const tripsQuery = useTripsQuery()
@@ -72,6 +96,17 @@ export const TripsPage = () => {
   const [opened, { open, close }] = useDisclosure(false)
   const [selectedResultIndex, setSelectedResultIndex] = useState<number | null>(null)
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNow(Date.now())
+    }, 1000)
+
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [])
 
   const openScorecard = (resultIndex: number, tripId: string) => {
     setSelectedResultIndex(resultIndex)
@@ -332,38 +367,51 @@ export const TripsPage = () => {
           <ScrollArea h={200} type="auto">
             <Stack gap="xs">
               {offersQuery.data?.length ? (
-                offersQuery.data.map((offer) => (
-                  <Paper key={offer.id} withBorder radius="md" p="sm">
-                    <Group justify="space-between">
-                      <Stack gap={2}>
-                        <Text fw={500}>Offer {offer.id}</Text>
-                        <Text size="xs" c="dimmed">
-                          Trip {offer.tripId} · Driver {offer.driverName} ({offer.driverStatus}) · {offer.distanceMeters} m
-                        </Text>
-                      </Stack>
-                      <Group gap="xs">
-                        <Button
-                          size="xs"
-                          color="green"
-                          variant="light"
-                          loading={respondOffer.isPending}
-                          onClick={() => handleRespondOffer(offer.id, 'accepted')}
-                        >
-                          Accept
-                        </Button>
-                        <Button
-                          size="xs"
-                          color="red"
-                          variant="light"
-                          loading={respondOffer.isPending}
-                          onClick={() => handleRespondOffer(offer.id, 'declined')}
-                        >
-                          Decline
-                        </Button>
+                offersQuery.data.map((offer) => {
+                  const { label: remainingLabel, isExpired } = getRemainingTimeLabel(offer.expiresAt, now)
+                  const expiresDisplay =
+                    remainingLabel === 'Expired'
+                      ? 'Expired'
+                      : remainingLabel === 'n/a'
+                        ? 'No expiration set'
+                        : `Expires in ${remainingLabel}`
+
+                  return (
+                    <Paper key={offer.id} withBorder radius="md" p="sm">
+                      <Group justify="space-between">
+                        <Stack gap={2}>
+                          <Text fw={500}>Offer {offer.id}</Text>
+                          <Text size="xs" c="dimmed">
+                            Trip {offer.tripId} · Driver {offer.driverName} ({offer.driverStatus}) · {offer.distanceMeters} m
+                          </Text>
+                          <Text size="xs" c={isExpired ? 'red' : 'dimmed'}>
+                            {expiresDisplay}
+                          </Text>
+                        </Stack>
+                        <Group gap="xs">
+                          <Button
+                            size="xs"
+                            color="green"
+                            variant="light"
+                            loading={respondOffer.isPending}
+                            onClick={() => handleRespondOffer(offer.id, 'accepted')}
+                          >
+                            Accept
+                          </Button>
+                          <Button
+                            size="xs"
+                            color="red"
+                            variant="light"
+                            loading={respondOffer.isPending}
+                            onClick={() => handleRespondOffer(offer.id, 'declined')}
+                          >
+                            Decline
+                          </Button>
+                        </Group>
                       </Group>
-                    </Group>
-                  </Paper>
-                ))
+                    </Paper>
+                  )
+                })
               ) : (
                 <Text size="sm" c="dimmed">
                   {offersQuery.isLoading ? 'Loading offers…' : 'No pending offers.'}
