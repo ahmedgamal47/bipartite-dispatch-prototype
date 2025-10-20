@@ -1,0 +1,83 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: dispatch_poc
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  backend:
+    build:
+      context: ./back
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    depends_on:
+      - mongo
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      MONGODB_URI: mongodb://mongo:27017/dispatch_poc
+      OFFER_TIMEOUT_SECONDS: 30
+      H3_RESOLUTION: 8
+    volumes:
+      - backend-node-modules:/app/node_modules
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    develop:
+      watch:
+        - action: sync
+          path: ./back
+          target: /app
+          ignore:
+            - node_modules/
+            - dist/
+            - coverage/
+            - .git/
+        - action: sync+restart
+          path: ./back/package.json
+          target: /app/package.json
+        - action: sync+restart
+          path: ./back/package-lock.json
+          target: /app/package-lock.json
+
+  frontend:
+    build:
+      context: ./front
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    depends_on:
+      - backend
+    environment:
+      NODE_ENV: development
+      VITE_API_BASE_URL: http://localhost:3000
+      VITE_H3_RESOLUTION: 8
+    volumes:
+      - frontend-node-modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+    develop:
+      watch:
+        - action: sync
+          path: ./front
+          target: /app
+          ignore:
+            - node_modules/
+            - dist/
+            - coverage/
+            - .git/
+        - action: sync+restart
+          path: ./front/package.json
+          target: /app/package.json
+        - action: sync+restart
+          path: ./front/package-lock.json
+          target: /app/package-lock.json
+
+volumes:
+  mongo-data:
+  backend-node-modules:
+  frontend-node-modules:

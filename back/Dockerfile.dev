@@ -1,0 +1,11 @@
+FROM node:20-alpine
+WORKDIR /app
+
+COPY package*.json ./
+
+COPY . .
+
+ENV NODE_ENV=development
+ENV CHOKIDAR_USEPOLLING=true
+
+CMD ["sh", "-c", "npm install && npm run start:dev"]

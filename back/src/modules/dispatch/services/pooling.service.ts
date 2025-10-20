@@ -1,13 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common'
-import type { PoolBatch, PoolEntry } from '../types'
-import { MatchingService } from './matching.service'
-import { TelemetryService } from './telemetry.service'
-import { OffersService } from '../../offers/offers.service'
+import { Injectable, Logger } from '@nestjs/common';
+import type { PoolBatch, PoolEntry } from '../types';
+import { MatchingService } from './matching.service';
+import { TelemetryService } from './telemetry.service';
+import { OffersService } from '../../offers/offers.service';
 
 @Injectable()
 export class PoolingService {
-  private readonly logger = new Logger(PoolingService.name)
-  private readonly pools = new Map<string, PoolBatch>()
+  private readonly logger = new Logger(PoolingService.name);
+  private readonly pools = new Map<string, PoolBatch>();
 
   constructor(
     private readonly matchingService: MatchingService,
@@ -16,11 +16,11 @@ export class PoolingService {
   ) {}
 
   queueTrip(entry: PoolEntry) {
-    const poolIndex = entry.pickup.h3Index
-    const batch = this.getOrCreate(poolIndex)
-    batch.trips = batch.trips.filter((trip) => trip.id !== entry.id)
-    batch.trips.push(entry)
-    batch.updatedAt = new Date().toISOString()
+    const poolIndex = entry.pickup.h3Index;
+    const batch = this.getOrCreate(poolIndex);
+    batch.trips = batch.trips.filter((trip) => trip.id !== entry.id);
+    batch.trips.push(entry);
+    batch.updatedAt = new Date().toISOString();
 
     void this.telemetryService.push({
       type: 'trip_queued',
@@ -30,25 +30,27 @@ export class PoolingService {
         riderId: entry.riderId,
         status: entry.status,
       },
-    })
+    });
   }
 
   getPools() {
-    return Array.from(this.pools.values()).filter((batch) => batch.trips.length > 0)
+    return Array.from(this.pools.values()).filter(
+      (batch) => batch.trips.length > 0,
+    );
   }
 
   async flush(h3Index?: string) {
-    const targets = h3Index ? [h3Index] : Array.from(this.pools.keys())
-    const results = []
+    const targets = h3Index ? [h3Index] : Array.from(this.pools.keys());
+    const results = [];
 
     for (const key of targets) {
-      const batch = this.pools.get(key)
+      const batch = this.pools.get(key);
       if (!batch || batch.trips.length === 0) {
-        continue
+        continue;
       }
 
-      const result = await this.matchingService.solve(batch)
-      results.push(result)
+      const result = await this.matchingService.solve(batch);
+      results.push(result);
 
       const requeueEntries: PoolEntry[] = batch.trips
         .filter((trip) => result.unassigned.includes(trip.id))
@@ -56,7 +58,7 @@ export class PoolingService {
           ...trip,
           status: 'queued',
           updatedAt: new Date().toISOString(),
-        }))
+        }));
 
       await this.telemetryService.push({
         type: 'pool_flushed',
@@ -66,9 +68,9 @@ export class PoolingService {
           assignments: result.assignments,
           unassigned: result.unassigned,
         },
-      })
+      });
 
-      await this.offersService.createForMatching(result)
+      await this.offersService.createForMatching(result);
 
       await this.telemetryService.push({
         type: 'matching_result',
@@ -79,30 +81,30 @@ export class PoolingService {
           strategy: result.strategy,
           metadata: result.metadata,
         },
-      })
+      });
 
-      this.pools.delete(key)
-      requeueEntries.forEach((entry) => this.queueTrip(entry))
+      this.pools.delete(key);
+      requeueEntries.forEach((entry) => this.queueTrip(entry));
     }
 
     if (!results.length) {
-      this.logger.debug('No pools to flush')
+      this.logger.debug('No pools to flush');
     }
 
-    return results
+    return results;
   }
 
   private getOrCreate(h3Index: string) {
-    let batch = this.pools.get(h3Index)
+    let batch = this.pools.get(h3Index);
     if (!batch) {
       batch = {
         h3Index,
         trips: [],
         windowStart: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-      }
-      this.pools.set(h3Index, batch)
+      };
+      this.pools.set(h3Index, batch);
     }
-    return batch
+    return batch;
   }
 }

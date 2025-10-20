@@ -1,12 +1,12 @@
-import { ValidationPipe } from '@nestjs/common'
-import { NestFactory } from '@nestjs/core'
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
-import { AppModule } from './app.module'
+import { ValidationPipe } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule)
+  const app = await NestFactory.create(AppModule);
 
-  app.enableCors({ origin: true })
+  app.enableCors({ origin: '*' });
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -15,18 +15,20 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
       forbidNonWhitelisted: true,
     }),
-  )
+  );
 
   const config = new DocumentBuilder()
     .setTitle('Dispatch POC API')
-    .setDescription('Core services for drivers, riders, trips, and dispatch orchestration.')
+    .setDescription(
+      'Core services for drivers, riders, trips, and dispatch orchestration.',
+    )
     .setVersion('0.1.0')
-    .build()
+    .build();
 
-  const document = SwaggerModule.createDocument(app, config)
-  SwaggerModule.setup('docs', app, document)
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('docs', app, document);
 
-  await app.listen(3000)
+  await app.listen(3000);
 }
 
-bootstrap()
+bootstrap();
