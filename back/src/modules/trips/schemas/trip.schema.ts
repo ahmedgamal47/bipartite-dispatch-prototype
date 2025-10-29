@@ -50,6 +50,9 @@ export class Trip {
   @Prop({ type: [String], default: [] })
   tags!: string[]
 
+  @Prop({ type: [String], default: [] })
+  excludedDriverIds!: string[]
+
   @Prop({ type: Number, default: 0 })
   failedAttempts!: number
 

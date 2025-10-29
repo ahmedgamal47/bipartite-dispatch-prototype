@@ -134,10 +134,13 @@ export class PoolingService {
       type: 'matching_result',
       data: {
         h3Index: batch.h3Index,
+        tripIds: result.tripIds,
         assignments: result.assignments,
         unassigned: result.unassigned,
         strategy: result.strategy,
+        generatedAt: result.generatedAt,
         metadata: result.metadata,
+        scorecards: result.scorecards,
         mode,
       },
     });

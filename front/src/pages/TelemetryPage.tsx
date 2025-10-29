@@ -66,9 +66,14 @@ export const TelemetryPage = () => {
                   <Group justify="space-between" align="flex-start">
                     <Stack gap={2}>
                       <Text fw={600}>{telemetryLabels[event.type] ?? event.type}</Text>
-                      <Text size="xs" c="dimmed">
-                        {JSON.stringify(event.data)}
-                      </Text>
+              <Text
+                size="xs"
+                c="dimmed"
+                component="pre"
+                style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}
+              >
+                {JSON.stringify(event.data, null, 2)}
+              </Text>
                     </Stack>
                     <Text size="xs" c="dimmed">
                       {new Date(event.timestamp).toLocaleString()}

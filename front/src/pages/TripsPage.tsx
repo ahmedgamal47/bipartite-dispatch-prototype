@@ -17,7 +17,7 @@ import {
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { modals } from '@mantine/modals'
 import { LocationPicker } from '@/components/location/LocationPicker'
 import { useRidersQuery } from '@/features/riders/api'
@@ -28,10 +28,12 @@ import {
   useDispatchPoolsQuery,
   useDispatchTelemetryQuery,
   useFlushPoolsMutation,
+  type DispatchTelemetryEvent,
   type MatchingResult,
 } from '@/features/dispatch/api'
 import { useOffersQuery, useRespondOfferMutation } from '@/features/offers/api'
 import { httpClient } from '@/lib/httpClient'
+import type { MatchingAssignment, MatchingScorecard } from '@/types/dispatch'
 
 const TRIP_STATUSES: TripRequest['status'][] = [
   'queued',
@@ -51,6 +53,70 @@ const statusColor: Record<TripRequest['status'], string> = {
   assigned: 'teal',
   no_driver: 'red',
   expired: 'gray',
+}
+
+const MAX_MATCHING_RESULTS = 10
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const parseMatchingResultEvent = (event: DispatchTelemetryEvent): MatchingResult | null => {
+  if (event.type !== 'matching_result') {
+    return null
+  }
+
+  const data = isRecord(event.data) ? event.data : {}
+
+  const generatedAt =
+    typeof data.generatedAt === 'string' && data.generatedAt.length > 0
+      ? data.generatedAt
+      : event.timestamp
+
+  const assignments = Array.isArray(data.assignments)
+    ? (data.assignments as MatchingAssignment[])
+    : []
+
+  const unassigned = Array.isArray(data.unassigned)
+    ? data.unassigned.map((value) => String(value))
+    : []
+
+  const metadataSource = isRecord(data.metadata) ? data.metadata : {}
+  const driversConsideredRaw = metadataSource.driversConsidered
+  const driversConsidered =
+    typeof driversConsideredRaw === 'number' && Number.isFinite(driversConsideredRaw)
+      ? driversConsideredRaw
+      : Number(driversConsideredRaw) || 0
+
+  const scorecards = Array.isArray(data.scorecards)
+    ? (data.scorecards as MatchingScorecard[])
+    : []
+
+  const tripIds = Array.isArray(data.tripIds)
+    ? data.tripIds.map((value) => String(value))
+    : []
+
+  const h3Index =
+    typeof data.h3Index === 'string' && data.h3Index.length > 0
+      ? data.h3Index
+      : 'unknown'
+
+  const strategy =
+    typeof data.strategy === 'string' && data.strategy.length > 0
+      ? data.strategy
+      : 'unknown'
+
+  return {
+    h3Index,
+    tripIds,
+    assignments,
+    unassigned,
+    strategy,
+    generatedAt,
+    metadata: {
+      driversConsidered,
+    },
+    scorecards,
+  }
 }
 
 const formatTimestamp = (value: string) => new Date(value).toLocaleString()
@@ -100,6 +166,46 @@ export const TripsPage = () => {
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
 
+  const mergeMatchingResults = useCallback(
+    (incoming: MatchingResult[]) => {
+      if (!incoming.length) {
+        return
+      }
+
+      setLastResults((prev) => {
+        const known = new Set(prev.map((result) => result.generatedAt))
+        const hasNew = incoming.some((result) => !known.has(result.generatedAt))
+
+        if (!hasNew) {
+          return prev
+        }
+
+        const combined = [...incoming, ...prev]
+        combined.sort(
+          (a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime(),
+        )
+
+        const next: MatchingResult[] = []
+        const seen = new Set<string>()
+
+        for (const result of combined) {
+          if (seen.has(result.generatedAt)) {
+            continue
+          }
+          next.push(result)
+          seen.add(result.generatedAt)
+
+          if (next.length >= MAX_MATCHING_RESULTS) {
+            break
+          }
+        }
+
+        return next
+      })
+    },
+    [setLastResults],
+  )
+
   useEffect(() => {
     const interval = window.setInterval(() => {
       setNow(Date.now())
@@ -109,6 +215,22 @@ export const TripsPage = () => {
       window.clearInterval(interval)
     }
   }, [])
+
+  useEffect(() => {
+    if (!telemetryQuery.data) {
+      return
+    }
+
+    const results = telemetryQuery.data
+      .map((event) => parseMatchingResultEvent(event))
+      .filter((value): value is MatchingResult => value !== null)
+
+    if (!results.length) {
+      return
+    }
+
+    mergeMatchingResults(results)
+  }, [telemetryQuery.data, mergeMatchingResults])
 
   const openScorecard = (resultIndex: number, tripId: string) => {
     setSelectedResultIndex(resultIndex)
@@ -163,7 +285,7 @@ export const TripsPage = () => {
       payload,
       {
         onSuccess: (results) => {
-          setLastResults(results)
+          mergeMatchingResults(results)
           const assignmentCount = results.reduce((acc, result) => acc + result.assignments.length, 0)
           const unmatchedCount = results.reduce((acc, result) => acc + result.unassigned.length, 0)
 
@@ -224,12 +346,7 @@ export const TripsPage = () => {
       })
 
       if (response.matchingResult) {
-        setLastResults((prev) => {
-          const filtered = prev.filter(
-            (result) => result.generatedAt !== response.matchingResult.generatedAt,
-          )
-          return [response.matchingResult, ...filtered].slice(0, 10)
-        })
+        mergeMatchingResults([response.matchingResult])
         closeScorecard()
       }
 
@@ -588,8 +705,13 @@ export const TripsPage = () => {
                         {formatTimestamp(event.timestamp)}
                       </Text>
                     </Group>
-                    <Text size="xs" c="dimmed">
-                      {JSON.stringify(event.data)}
+                    <Text
+                      size="xs"
+                      c="dimmed"
+                      component="pre"
+                      style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}
+                    >
+                      {JSON.stringify(event.data, null, 2)}
                     </Text>
                   </Paper>
                 ))

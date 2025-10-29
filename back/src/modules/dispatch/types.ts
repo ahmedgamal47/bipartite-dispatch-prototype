@@ -19,6 +19,7 @@ export type PoolEntry = {
     h3Index: string
   }
   tags: string[]
+  excludedDriverIds: string[]
   createdAt: string
   updatedAt: string
 }

@@ -190,6 +190,7 @@ export class TripsService {
         h3Index: doc.dropoff.h3Index,
       },
       tags: doc.tags ?? [],
+      excludedDriverIds: doc.excludedDriverIds ?? [],
       createdAt: new Date(doc.createdAt).toISOString(),
       updatedAt: new Date(doc.updatedAt).toISOString(),
     }

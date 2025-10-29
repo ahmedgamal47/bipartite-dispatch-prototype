@@ -64,11 +64,22 @@ export class MatchingService {
     const unassigned: string[] = [];
     const scorecards: MatchingScorecard[] = [];
     const assignedDriverIds = new Set<string>();
+    const consideredDriverIds = new Set<string>();
 
     for (let i = 0; i < batch.trips.length; i++) {
       const trip = batch.trips[i];
-      const candidates: MatchingCandidateScore[] = availableDrivers.map(
-        (driver, j) => ({
+      const excluded = new Set(trip.excludedDriverIds ?? []);
+      const candidates: MatchingCandidateScore[] = [];
+
+      for (let j = 0; j < availableDrivers.length; j++) {
+        const driver = availableDrivers[j];
+        if (excluded.has(driver.id)) {
+          continue;
+        }
+
+        const isCandidate = candidateMatrix[i]?.[j] ?? false;
+
+        candidates.push({
           driverId: driver.id,
           driverName: driver.name,
           driverStatus: driver.status,
@@ -79,9 +90,13 @@ export class MatchingService {
           blendedCost: this.roundScore(
             costMatrix[i]?.[j] ?? this.noMatchCost(),
           ),
-          isCandidate: candidateMatrix[i]?.[j] ?? false,
-        }),
-      );
+          isCandidate,
+        });
+
+        if (isCandidate) {
+          consideredDriverIds.add(driver.id);
+        }
+      }
 
       scorecards.push({
         tripId: trip.id,
@@ -140,7 +155,7 @@ export class MatchingService {
       strategy: 'hungarian_distance_rating',
       generatedAt: new Date().toISOString(),
       metadata: {
-        driversConsidered: availableDrivers.length,
+        driversConsidered: consideredDriverIds.size,
       },
       scorecards,
     };
@@ -195,6 +210,7 @@ export class MatchingService {
       candidateMatrix[i] = [];
       distanceScores[i] = [];
       ratingScores[i] = [];
+      const excludedDriverIds = new Set(trip.excludedDriverIds ?? []);
 
       for (let j = 0; j < drivers.length; j++) {
         const driver = drivers[j];
@@ -211,7 +227,8 @@ export class MatchingService {
           trip.pickup.h3Index,
           driver.location.h3Index,
         );
-        const isCandidate = h3Distance !== null && h3Distance <= 1;
+        const isExcluded = excludedDriverIds.has(driver.id);
+        const isCandidate = !isExcluded && h3Distance !== null && h3Distance <= 1;
         candidateMatrix[i][j] = isCandidate;
 
         if (distance > maxDistance) {

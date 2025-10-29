@@ -184,6 +184,13 @@ export class OffersService {
         .updateOne({ _id: driverObjectId }, { $set: { status: 'available' } })
         .exec();
 
+      await this.tripModel
+        .updateOne(
+          { _id: offer.tripId },
+          { $addToSet: { excludedDriverIds: offer.driverId } },
+        )
+        .exec();
+
       await this.handleDispatchFailure(offer.tripId, 'declined');
     }
 
@@ -398,6 +405,7 @@ export class OffersService {
         h3Index: obj.dropoff.h3Index,
       },
       tags: obj.tags ?? [],
+      excludedDriverIds: obj.excludedDriverIds ?? [],
       createdAt: createdAt.toISOString(),
       updatedAt: updatedAt.toISOString(),
     };
