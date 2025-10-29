@@ -4,10 +4,10 @@ import { Model, Types } from 'mongoose'
 import { H3Service } from '../../common/h3.service'
 import { CreateTripDto } from './dto/create-trip.dto'
 import { UpdateTripDto } from './dto/update-trip.dto'
-import { Trip, TripDocument, TripStatus } from './schemas/trip.schema'
+import { Trip, TripDocument, TripStatus, DispatchMode } from './schemas/trip.schema'
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema'
 import { PoolingService } from '../dispatch/services/pooling.service'
-import type { PoolEntry } from '../dispatch/types'
+import type { PoolEntry, MatchingResult } from '../dispatch/types'
 
 @Injectable()
 export class TripsService {
@@ -33,14 +33,22 @@ export class TripsService {
       dropoff: { ...payload.dropoff, h3Index: dropoffH3 },
       status: payload.status ?? 'queued',
       tags: payload.tags ?? [],
+      dispatchMode: payload.dispatchMode ?? 'pooled',
     })
 
     const saved = await document.save()
     const object = saved.toObject()
+    const poolEntry = this.asPoolEntry(object)
 
-    this.poolingService.queueTrip(this.asPoolEntry(object))
+    let matchResult: MatchingResult | undefined
 
-    return object
+    if (payload.dispatchMode === 'single') {
+      matchResult = await this.poolingService.dispatchImmediately(poolEntry)
+    } else {
+      this.poolingService.queueTrip(poolEntry)
+    }
+
+    return matchResult ? { trip: object, matchingResult: matchResult } : { trip: object }
   }
 
   async findAll() {
@@ -147,6 +155,7 @@ export class TripsService {
         },
         status: 'queued',
         tags: ['generated'],
+        dispatchMode: 'pooled',
       })
 
       documents.push(trip)
@@ -167,6 +176,7 @@ export class TripsService {
       id: doc.id,
       riderId: doc.riderId.toString(),
       status: doc.status as TripStatus,
+      dispatchMode: (doc.dispatchMode ?? 'pooled') as DispatchMode,
       pickup: {
         lat: doc.pickup.lat,
         lng: doc.pickup.lng,

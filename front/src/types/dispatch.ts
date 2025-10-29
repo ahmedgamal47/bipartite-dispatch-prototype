@@ -1,3 +1,5 @@
+export type DispatchMode = 'pooled' | 'single'
+
 export type DriverStatus = 'available' | 'busy' | 'offline'
 
 export type DriverProfile = {
@@ -53,6 +55,8 @@ export type TripRequest = {
     | 'expired'
   createdAt: string
   updatedAt: string
+  failedAttempts?: number
+  dispatchMode: DispatchMode
 }
 
 export type OfferRecord = {
@@ -93,4 +97,5 @@ export type MatchingScorecard = {
   tripId: string
   riderId: string
   candidates: MatchingCandidateScore[]
+  selectedDriverId: string | null
 }

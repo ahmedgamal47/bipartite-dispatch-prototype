@@ -87,6 +87,7 @@ export class MatchingService {
         tripId: trip.id,
         riderId: trip.riderId,
         candidates,
+        selectedDriverId: null,
       });
     }
 
@@ -117,6 +118,9 @@ export class MatchingService {
         driverStatus: driver.status,
         distanceMeters: Math.round(distance ?? 0),
       });
+      if (scorecards[tripIndex]) {
+        scorecards[tripIndex].selectedDriverId = driver.id;
+      }
       assignedDriverIds.add(driver.id);
     }
 
@@ -225,14 +229,15 @@ export class MatchingService {
       return drivers.map((driver, j) => {
         const candidate = candidateMatrix[i][j];
         const distance = distanceMatrix[i][j];
-        const distanceScore = Math.min(distance / maxDistance, 1);
-        const ratingScore = 1 - Math.min(Math.max(driver.rating / 5, 0), 1);
-        const blended = 0.5 * distanceScore + 0.5 * ratingScore;
+        const distanceNormalized = Math.min(distance / maxDistance, 1);
+        const distanceScore = 1 - distanceNormalized;
+        const ratingScore = Math.min(Math.max(driver.rating / 5, 0), 1);
+        const cost = 0.5 * distanceNormalized + 0.5 * (1 - ratingScore);
 
         distanceScores[i][j] = this.roundScore(distanceScore);
         ratingScores[i][j] = this.roundScore(ratingScore);
 
-        return candidate ? blended : INF;
+        return candidate ? cost : INF;
       });
     });
 

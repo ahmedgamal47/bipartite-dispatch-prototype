@@ -8,6 +8,7 @@ import {
   Pill,
   ScrollArea,
   Select,
+  Switch,
   Stack,
   Table,
   Text,
@@ -92,6 +93,7 @@ export const TripsPage = () => {
   const [pickupLocation, setPickupLocation] = useState<LocationValue | null>(null)
   const [dropoffLocation, setDropoffLocation] = useState<LocationValue | null>(null)
   const [status, setStatus] = useState<TripRequest['status']>('queued')
+  const [singleDispatch, setSingleDispatch] = useState(false)
   const [lastResults, setLastResults] = useState<MatchingResult[]>([])
   const [opened, { open, close }] = useDisclosure(false)
   const [selectedResultIndex, setSelectedResultIndex] = useState<number | null>(null)
@@ -204,7 +206,8 @@ export const TripsPage = () => {
     }
 
     try {
-      await createTrip.mutateAsync({
+      const dispatchMode = singleDispatch ? 'single' : 'pooled'
+      const response = await createTrip.mutateAsync({
         riderId: selectedRider,
         pickup: {
           lat: pickupLocation.lat,
@@ -217,11 +220,26 @@ export const TripsPage = () => {
           address: dropoffLocation.label,
         },
         status,
+        dispatchMode,
       })
+
+      if (response.matchingResult) {
+        setLastResults((prev) => {
+          const filtered = prev.filter(
+            (result) => result.generatedAt !== response.matchingResult.generatedAt,
+          )
+          return [response.matchingResult, ...filtered].slice(0, 10)
+        })
+        closeScorecard()
+      }
+
+      const successMessage = singleDispatch
+        ? 'Trip request dispatched immediately.'
+        : 'Trip request queued successfully.'
 
       notifications.show({
         title: 'Trip created',
-        message: 'Trip request queued successfully.',
+        message: successMessage,
         color: 'green',
       })
       resetForm()
@@ -285,6 +303,12 @@ export const TripsPage = () => {
             data={TRIP_STATUSES.map((value) => ({ value, label: value.toUpperCase() }))}
             value={status}
             onChange={(value) => setStatus((value as TripRequest['status']) ?? 'queued')}
+          />
+          <Switch
+            label="Single dispatch mode"
+            description="Skip pooling and run matching immediately"
+            checked={singleDispatch}
+            onChange={(event) => setSingleDispatch(event.currentTarget.checked)}
           />
           <Divider />
           <LocationPicker
@@ -493,7 +517,7 @@ export const TripsPage = () => {
             </ScrollArea>
           ) : (
             <Text size="sm" c="dimmed">
-              Flush pools to see matching results.
+              Run a single dispatch or flush pools to see matching results.
             </Text>
           )}
         </Paper>
@@ -584,7 +608,7 @@ export const TripsPage = () => {
         opened={opened}
         onClose={closeScorecard}
         title={`Scorecard${selectedTripId ? ` · Trip ${selectedTripId}` : ''}`}
-        size="lg"
+        size="960px"
         withinPortal
       >
         {activeScorecard ? (
@@ -598,26 +622,36 @@ export const TripsPage = () => {
                   <Table.Th>Driver</Table.Th>
                   <Table.Th>Status</Table.Th>
                   <Table.Th>Distance (m)</Table.Th>
-                  <Table.Th>Distance Score</Table.Th>
+                  <Table.Th>Distance Score (higher is better)</Table.Th>
                   <Table.Th>Rating</Table.Th>
-                  <Table.Th>Rating Score</Table.Th>
-                  <Table.Th>Blended Cost</Table.Th>
+                  <Table.Th>Rating Score (higher is better)</Table.Th>
+                  <Table.Th>Blended Cost (lower is better)</Table.Th>
                   <Table.Th>Candidate</Table.Th>
+                  <Table.Th>Selected</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {activeScorecard.candidates.map((candidate) => (
-                  <Table.Tr key={candidate.driverId}>
-                    <Table.Td>{candidate.driverName}</Table.Td>
-                    <Table.Td>{candidate.driverStatus}</Table.Td>
-                    <Table.Td>{candidate.distanceMeters}</Table.Td>
-                    <Table.Td>{candidate.distanceScore.toFixed(3)}</Table.Td>
-                    <Table.Td>{candidate.rating.toFixed(1)}</Table.Td>
-                    <Table.Td>{candidate.ratingScore.toFixed(3)}</Table.Td>
-                    <Table.Td>{candidate.blendedCost.toFixed(3)}</Table.Td>
-                    <Table.Td>{candidate.isCandidate ? '✔' : '—'}</Table.Td>
-                  </Table.Tr>
-                ))}
+                {[...activeScorecard.candidates]
+                  .sort((a, b) => a.blendedCost - b.blendedCost)
+                  .map((candidate) => {
+                    const isSelected = candidate.driverId === activeScorecard.selectedDriverId
+                    return (
+                      <Table.Tr
+                        key={candidate.driverId}
+                        style={isSelected ? { backgroundColor: 'var(--mantine-color-green-0)' } : undefined}
+                      >
+                        <Table.Td>{candidate.driverName}</Table.Td>
+                        <Table.Td>{candidate.driverStatus}</Table.Td>
+                        <Table.Td>{candidate.distanceMeters}</Table.Td>
+                        <Table.Td>{candidate.distanceScore.toFixed(3)}</Table.Td>
+                        <Table.Td>{candidate.rating.toFixed(1)}</Table.Td>
+                        <Table.Td>{candidate.ratingScore.toFixed(3)}</Table.Td>
+                        <Table.Td>{candidate.blendedCost.toFixed(3)}</Table.Td>
+                        <Table.Td>{candidate.isCandidate ? 'Yes' : 'No'}</Table.Td>
+                        <Table.Td>{isSelected ? 'Yes' : ''}</Table.Td>
+                      </Table.Tr>
+                    )
+                  })}
               </Table.Tbody>
             </Table>
           </Stack>
@@ -628,3 +662,4 @@ export const TripsPage = () => {
     </>
   )
 }
+

@@ -6,7 +6,21 @@ export type TelemetryEventDocument = HydratedDocument<TelemetryEventEntity>;
 
 @Schema({ timestamps: { createdAt: 'timestamp', updatedAt: false } })
 export class TelemetryEventEntity {
-  @Prop({ type: String, enum: ['trip_queued', 'pool_flushed', 'matching_result', 'offer_created', 'offer_accepted', 'offer_declined', 'offer_timeout'], required: true })
+  @Prop({
+    type: String,
+    enum: [
+      'trip_queued',
+      'pool_flushed',
+      'matching_result',
+      'offer_created',
+      'offer_accepted',
+      'offer_declined',
+      'offer_timeout',
+      'single_dispatch_started',
+      'trip_no_driver',
+    ],
+    required: true,
+  })
   type!: TelemetryEventType;
 
   @Prop({ type: MongooseSchema.Types.Mixed, default: {} })

@@ -1,10 +1,11 @@
-import type { TripStatus } from '../trips/schemas/trip.schema'
+import type { TripStatus, DispatchMode } from '../trips/schemas/trip.schema'
 import type { DriverStatus } from '../drivers/schemas/driver.schema'
 
 export type PoolEntry = {
   id: string
   riderId: string
   status: TripStatus
+  dispatchMode: DispatchMode
   pickup: {
     lat: number
     lng: number
@@ -54,6 +55,7 @@ export type MatchingScorecard = {
   tripId: string
   riderId: string
   candidates: MatchingCandidateScore[]
+  selectedDriverId: string | null
 }
 
 export type MatchingCandidateScore = {
@@ -76,6 +78,8 @@ export type TelemetryEventType =
   | 'offer_accepted'
   | 'offer_declined'
   | 'offer_timeout'
+  | 'single_dispatch_started'
+  | 'trip_no_driver'
 
 export type TelemetryEvent = {
   id: string

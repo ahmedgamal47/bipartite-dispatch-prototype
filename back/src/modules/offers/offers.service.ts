@@ -1,10 +1,20 @@
-import { Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  NotFoundException,
+  forwardRef,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Offer, OfferDocument } from './schemas/offer.schema';
 import { MatchingResult, PoolEntry } from '../dispatch/types';
-import { Trip, TripDocument, TripStatus } from '../trips/schemas/trip.schema';
+import {
+  Trip,
+  TripDocument,
+  TripStatus,
+  DispatchMode,
+} from '../trips/schemas/trip.schema';
 import { Driver, DriverDocument } from '../drivers/schemas/driver.schema';
 import { PoolingService } from '../dispatch/services/pooling.service';
 import { TelemetryService } from '../dispatch/services/telemetry.service';
@@ -13,6 +23,7 @@ import { TelemetryService } from '../dispatch/services/telemetry.service';
 export class OffersService {
   private readonly offerTimeoutMs: number;
   private readonly timers = new Map<string, NodeJS.Timeout>();
+  private readonly maxDispatchFailures = 3;
 
   constructor(
     @InjectModel(Offer.name) private readonly offerModel: Model<OfferDocument>,
@@ -159,30 +170,26 @@ export class OffersService {
     if (status === 'accepted') {
       await Promise.all([
         this.tripModel
-          .updateOne({ _id: offer.tripId }, { $set: { status: 'assigned' } })
+          .updateOne(
+            { _id: offer.tripId },
+            { $set: { status: 'assigned', failedAttempts: 0 } },
+          )
           .exec(),
         this.driverModel
           .updateOne({ _id: driverObjectId }, { $set: { status: 'busy' } })
           .exec(),
       ]);
     } else {
-      await Promise.all([
-        this.tripModel
-          .updateOne({ _id: offer.tripId }, { $set: { status: 'queued' } })
-          .exec(),
-        this.driverModel
-          .updateOne({ _id: driverObjectId }, { $set: { status: 'available' } })
-          .exec(),
-      ]);
+      await this.driverModel
+        .updateOne({ _id: driverObjectId }, { $set: { status: 'available' } })
+        .exec();
 
-      const trip = await this.tripModel.findById(offer.tripId).exec();
-      if (trip) {
-        this.poolingService.queueTrip(this.toPoolEntry(trip));
-      }
+      await this.handleDispatchFailure(offer.tripId, 'declined');
     }
 
     const createdAtDate = this.extractDate(offer, 'createdAt');
-    const respondedAtDate = this.extractDate(offer, 'respondedAt') ?? new Date();
+    const respondedAtDate =
+      this.extractDate(offer, 'respondedAt') ?? new Date();
     const responseMs = createdAtDate
       ? respondedAtDate.getTime() - createdAtDate.getTime()
       : undefined;
@@ -254,19 +261,16 @@ export class OffersService {
       ? new Types.ObjectId(offer.driverId)
       : offer.driverId;
 
-    await Promise.all([
-      this.tripModel
-        .updateOne({ _id: offer.tripId }, { $set: { status: 'queued' } })
-        .exec(),
-      this.driverModel
-        .updateOne({ _id: driverObjectId }, { $set: { status: 'available' } })
-        .exec(),
-    ]);
+    await this.driverModel
+      .updateOne({ _id: driverObjectId }, { $set: { status: 'available' } })
+      .exec();
 
     this.clearExpirationTimer(offerId);
 
     const createdAtDate = this.extractDate(offer, 'createdAt');
-    const timeoutMs = createdAtDate ? Date.now() - createdAtDate.getTime() : undefined;
+    const timeoutMs = createdAtDate
+      ? Date.now() - createdAtDate.getTime()
+      : undefined;
 
     await this.telemetryService.push({
       type: 'offer_timeout',
@@ -276,9 +280,54 @@ export class OffersService {
       },
     });
 
-    const trip = await this.tripModel.findById(offer.tripId).exec();
-    if (trip) {
-      this.poolingService.queueTrip(this.toPoolEntry(trip));
+    await this.handleDispatchFailure(offer.tripId, 'timeout');
+  }
+
+  private async handleDispatchFailure(
+    tripId: Types.ObjectId | string,
+    reason: 'declined' | 'timeout',
+  ) {
+    const trip = await this.tripModel.findById(tripId).exec();
+    if (!trip) {
+      return;
+    }
+
+    const dispatchMode = (
+      trip.get('dispatchMode') ?? trip.dispatchMode ?? 'pooled'
+    ) as DispatchMode;
+
+    const current = Number(trip.get('failedAttempts') ?? trip.failedAttempts ?? 0);
+    const attempts = Number.isFinite(current) ? current + 1 : 1;
+
+    trip.failedAttempts = attempts;
+
+    if (attempts >= this.maxDispatchFailures) {
+      trip.status = 'no_driver';
+      await trip.save();
+
+      await this.telemetryService.push({
+        type: 'trip_no_driver',
+        data: {
+          tripId: trip._id.toString(),
+          riderId:
+            trip.riderId instanceof Types.ObjectId
+              ? trip.riderId.toString()
+              : String(trip.riderId),
+          attempts,
+          reason,
+        },
+      });
+      return;
+    }
+
+    trip.status = 'queued';
+    await trip.save();
+
+    const entry = this.toPoolEntry(trip);
+    if (dispatchMode === 'single') {
+      await this.poolingService.dispatchImmediately(entry);
+    } else {
+      this.poolingService.queueTrip(entry);
     }
   }
 
@@ -305,7 +354,10 @@ export class OffersService {
   }
 
   private offerTelemetryBase(offer: OfferDocument) {
-    const tripId = offer.tripId instanceof Types.ObjectId ? offer.tripId.toString() : offer.tripId;
+    const tripId =
+      offer.tripId instanceof Types.ObjectId
+        ? offer.tripId.toString()
+        : offer.tripId;
     return {
       offerId: offer._id.toString(),
       tripId,
@@ -332,6 +384,7 @@ export class OffersService {
       id: trip._id.toString(),
       riderId: obj.riderId.toString(),
       status: (obj.status ?? 'queued') as TripStatus,
+      dispatchMode: (obj.dispatchMode ?? 'pooled') as DispatchMode,
       pickup: {
         lat: obj.pickup.lat,
         lng: obj.pickup.lng,
@@ -350,4 +403,3 @@ export class OffersService {
     };
   }
 }
-

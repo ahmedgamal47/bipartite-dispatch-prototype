@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { PoolBatch, PoolEntry } from '../types';
+import type { PoolBatch, PoolEntry, MatchingResult } from '../types';
 import { MatchingService } from './matching.service';
 import { TelemetryService } from './telemetry.service';
 import { OffersService } from '../../offers/offers.service';
@@ -16,6 +16,10 @@ export class PoolingService {
   ) {}
 
   queueTrip(entry: PoolEntry) {
+    if (entry.status === 'no_driver') {
+      return;
+    }
+
     const poolIndex = entry.pickup.h3Index;
     const batch = this.getOrCreate(poolIndex);
     batch.trips = batch.trips.filter((trip) => trip.id !== entry.id);
@@ -39,6 +43,29 @@ export class PoolingService {
     );
   }
 
+  async dispatchImmediately(entry: PoolEntry) {
+    await this.telemetryService.push({
+      type: 'single_dispatch_started',
+      data: {
+        h3Index: entry.pickup.h3Index,
+        tripId: entry.id,
+        riderId: entry.riderId,
+        submittedAt: entry.createdAt,
+      },
+    });
+
+    const batch: PoolBatch = {
+      h3Index: entry.pickup.h3Index,
+      trips: [entry],
+      windowStart: entry.createdAt,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const result = await this.matchingService.solve(batch);
+    await this.handleDispatchOutcome(batch, result, 'single');
+    return result;
+  }
+
   async flush(h3Index?: string) {
     const targets = h3Index ? [h3Index] : Array.from(this.pools.keys());
     const results = [];
@@ -52,39 +79,7 @@ export class PoolingService {
       const result = await this.matchingService.solve(batch);
       results.push(result);
 
-      const requeueEntries: PoolEntry[] = batch.trips
-        .filter((trip) => result.unassigned.includes(trip.id))
-        .map((trip) => ({
-          ...trip,
-          status: 'queued',
-          updatedAt: new Date().toISOString(),
-        }));
-
-      await this.telemetryService.push({
-        type: 'pool_flushed',
-        data: {
-          h3Index: key,
-          tripCount: batch.trips.length,
-          assignments: result.assignments,
-          unassigned: result.unassigned,
-        },
-      });
-
-      await this.offersService.createForMatching(result);
-
-      await this.telemetryService.push({
-        type: 'matching_result',
-        data: {
-          h3Index: key,
-          assignments: result.assignments,
-          unassigned: result.unassigned,
-          strategy: result.strategy,
-          metadata: result.metadata,
-        },
-      });
-
-      this.pools.delete(key);
-      requeueEntries.forEach((entry) => this.queueTrip(entry));
+      await this.handleDispatchOutcome(batch, result, 'pooled');
     }
 
     if (!results.length) {
@@ -106,5 +101,51 @@ export class PoolingService {
       this.pools.set(h3Index, batch);
     }
     return batch;
+  }
+
+  private async handleDispatchOutcome(
+    batch: PoolBatch,
+    result: MatchingResult,
+    mode: 'pooled' | 'single',
+  ) {
+    const requeueEntries: PoolEntry[] = batch.trips
+      .filter((trip) => result.unassigned.includes(trip.id))
+      .map((trip) => ({
+        ...trip,
+        status: 'queued',
+        updatedAt: new Date().toISOString(),
+      }));
+
+    if (mode === 'pooled') {
+      await this.telemetryService.push({
+        type: 'pool_flushed',
+        data: {
+          h3Index: batch.h3Index,
+          tripCount: batch.trips.length,
+          assignments: result.assignments,
+          unassigned: result.unassigned,
+        },
+      });
+    }
+
+    await this.offersService.createForMatching(result);
+
+    await this.telemetryService.push({
+      type: 'matching_result',
+      data: {
+        h3Index: batch.h3Index,
+        assignments: result.assignments,
+        unassigned: result.unassigned,
+        strategy: result.strategy,
+        metadata: result.metadata,
+        mode,
+      },
+    });
+
+    if (mode === 'pooled') {
+      this.pools.delete(batch.h3Index);
+    }
+
+    requeueEntries.forEach((entry) => this.queueTrip(entry));
   }
 }

@@ -9,8 +9,8 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator'
-import { TRIP_STATUSES } from '../schemas/trip.schema'
-import type { TripStatus } from '../schemas/trip.schema'
+import { TRIP_STATUSES, DISPATCH_MODES } from '../schemas/trip.schema'
+import type { TripStatus, DispatchMode } from '../schemas/trip.schema'
 
 class TripLocationDto {
   @ApiProperty({ example: 36.737232 })
@@ -46,6 +46,11 @@ export class CreateTripDto {
   @IsEnum(TRIP_STATUSES)
   @IsOptional()
   status?: TripStatus
+
+  @ApiPropertyOptional({ enum: DISPATCH_MODES, default: 'pooled' })
+  @IsEnum(DISPATCH_MODES)
+  @IsOptional()
+  dispatchMode?: DispatchMode
 
   @ApiPropertyOptional({ type: [String], example: ['pool:h3:87283472fffffff'] })
   @IsArray()

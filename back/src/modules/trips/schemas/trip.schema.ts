@@ -13,7 +13,10 @@ export const TRIP_STATUSES = [
   'expired',
 ] as const
 
+export const DISPATCH_MODES = ['pooled', 'single'] as const
+
 export type TripStatus = (typeof TRIP_STATUSES)[number]
+export type DispatchMode = (typeof DISPATCH_MODES)[number]
 
 @Schema({ _id: false })
 export class TripLocation {
@@ -46,6 +49,12 @@ export class Trip {
 
   @Prop({ type: [String], default: [] })
   tags!: string[]
+
+  @Prop({ type: Number, default: 0 })
+  failedAttempts!: number
+
+  @Prop({ enum: DISPATCH_MODES, default: 'pooled' })
+  dispatchMode!: DispatchMode
 }
 
 export const TripSchema = SchemaFactory.createForClass(Trip)
@@ -57,6 +66,9 @@ const applyTransform = (_doc: TripDocument, ret: any) => {
   }
   if (ret.riderId) {
     ret.riderId = ret.riderId.toString()
+  }
+  if (!ret.dispatchMode) {
+    ret.dispatchMode = 'pooled'
   }
   return ret
 }

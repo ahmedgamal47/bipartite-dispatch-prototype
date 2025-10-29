@@ -25,7 +25,16 @@ export type DispatchPool = {
 export type DispatchTelemetryEvent = {
   id: string
   timestamp: string
-  type: 'trip_queued' | 'pool_flushed' | 'matching_result' | 'offer_created' | 'offer_accepted' | 'offer_declined' | 'offer_timeout'
+  type:
+    | 'trip_queued'
+    | 'pool_flushed'
+    | 'matching_result'
+    | 'offer_created'
+    | 'offer_accepted'
+    | 'offer_declined'
+    | 'offer_timeout'
+    | 'single_dispatch_started'
+    | 'trip_no_driver'
   data: Record<string, unknown>
 }
 
